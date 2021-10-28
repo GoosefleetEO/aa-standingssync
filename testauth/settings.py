@@ -213,7 +213,7 @@ LOGGING = {
             "backupCount": 5,  # edit this line to change number of log backups
         },
         "console": {
-            "level": "DEBUG",  # edit this line to change logging level to console
+            "level": "CRITICAL",  # edit this line to change logging level to console
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
@@ -230,7 +230,7 @@ LOGGING = {
         },
         "django": {
             "handlers": ["log_file", "console"],
-            "level": "CRITICAL",
+            "level": "ERROR",
         },
         "esi": {
             "handlers": ["log_file", "console"],
@@ -238,6 +238,8 @@ LOGGING = {
         },
     },
 }
+
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 ########################################################
 # local.py settings
