@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## [1.2.2] - 2022-03-01
+
+## Changed
+
+- Remove deprecations that are being remove in Django 4
+
 ## [1.2.1] - 2021-10-28
 
 ## Changed

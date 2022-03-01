@@ -12,7 +12,7 @@ before_script:
 
 pre-commit-check:
   stage: pre-commit
-  image: python:3.7-buster
+  image: python:3.8-bullseye
   variables:
     PRE_COMMIT_HOME: ${CI_PROJECT_DIR}/.cache/pre-commit
   cache:
@@ -24,15 +24,15 @@ pre-commit-check:
 
 .test-py37:
   stage: test
-  image: python:3.7-buster
+  image: python:3.7-bullseye
 
 .test-py38:
   stage: test
-  image: python:3.8-buster
+  image: python:3.8-bullseye
 
 .test-py39:
   stage: test
-  image: python:3.9-buster
+  image: python:3.9-bullseye
 
 test-37-django32:
   extends: .test-py37
@@ -55,7 +55,7 @@ test-39-django32:
 
 deploy-pypi:
   stage: deploy
-  image: python:3.7-buster
+  image: python:3.8-bullseye
 
   before_script:
     - pip install twine
