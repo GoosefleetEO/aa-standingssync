@@ -137,7 +137,7 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
         request = self.factory.get(reverse("standingssync:add_character"))
         request.user = user
         request.token = token
-        middleware = SessionMiddleware()
+        middleware = SessionMiddleware(Mock())
         middleware.process_request(request)
         orig_view = views.add_character.__wrapped__.__wrapped__.__wrapped__
         return orig_view(request, token)
@@ -280,7 +280,7 @@ class TestAddAllianceManager(LoadTestDataMixin, NoSocketsTestCase):
         request = self.factory.get(reverse("standingssync:add_alliance_manager"))
         request.user = user
         request.token = token
-        middleware = SessionMiddleware()
+        middleware = SessionMiddleware(Mock())
         middleware.process_request(request)
         orig_view = views.add_alliance_manager.__wrapped__.__wrapped__.__wrapped__
         return orig_view(request, token)

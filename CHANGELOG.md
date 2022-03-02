@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## [1.2.3] - 2022-03-02
+
+## Fixed
+
+- SessionMiddleware() in tests requires additional parameter
+
+## Changed
+
 ## [1.2.2] - 2022-03-01
 
 ## Changed
