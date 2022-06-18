@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## [1.3.1] - 2022-06-18
+
+## Changed
+
+- Add wheel to PyPI deployment
+- Switch to local swagger spec file
+- Add tests to distribution package
+
 ## [1.3.0] - 2022-03-02
 
 ## Changed
