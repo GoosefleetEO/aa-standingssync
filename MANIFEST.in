@@ -5,6 +5,5 @@ recursive-include standingssync *.py
 recursive-include standingssync/static *
 recursive-include standingssync/templates *
 recursive-include standingssync/templatetags *.py
-recursive-exclude standingssync/templatetags *.pyc
+recursive-include standingssync/tests *
 recursive-exclude testauth *.*
-recursive-exclude standingssync/tests *.*
