@@ -1,6 +1,7 @@
 from typing import List, Tuple
 
 from django.db import models
+from django.db.models import Exists, OuterRef
 from django.utils.timezone import now
 
 from allianceauth.services.hooks import get_extension_logger
@@ -59,7 +60,14 @@ class EveEntityManager(models.Manager):
         return self.get_or_create(id=id, defaults={"category": category})
 
 
-class EveWarManager(models.Manager):
+class EveWarQuerySet(models.QuerySet):
+    def annotate_active_wars(self) -> models.QuerySet:
+        from .models import EveWar
+
+        return self.annotate(
+            active=Exists(EveWar.objects.active_wars().filter(pk=OuterRef("pk")))
+        )
+
     def active_wars(self) -> models.QuerySet:
         return self.filter(started__lt=now(), finished__gt=now()) | self.filter(
             started__lt=now(), finished__isnull=True
@@ -68,6 +76,8 @@ class EveWarManager(models.Manager):
     def finished_wars(self) -> models.QuerySet:
         return self.filter(finished__lte=now())
 
+
+class EveWarManagerBase(models.Manager):
     def war_targets(self, alliance_id: int) -> List[models.Model]:
         """returns list of current war targets for given alliance as EveEntity objects
         or an empty list if there are none
@@ -139,3 +149,6 @@ class EveWarManager(models.Manager):
             for ally_info in war_info.get("allies"):
                 eve_entity = EveEntity.objects.get_or_create_from_esi_info(ally_info)[0]
                 war.allies.add(eve_entity)
+
+
+EveWarManager = EveWarManagerBase.from_queryset(EveWarQuerySet)

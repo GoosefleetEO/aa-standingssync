@@ -1,7 +1,55 @@
 from django.contrib import admin
 
 from . import tasks
-from .models import SyncedCharacter, SyncManager
+from .models import EveWar, SyncedCharacter, SyncManager
+
+
+class ActiveWarsListFilter(admin.SimpleListFilter):
+    title = "active_wars"
+    parameter_name = "active_wars"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "yes"),
+            ("no", "no"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.annotate_active_wars().filter(active=True)
+        if self.value() == "no":
+            return queryset.annotate_active_wars().filter(active=False)
+        return queryset
+
+
+@admin.register(EveWar)
+class EveWarAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "declared",
+        "aggressor",
+        "defender",
+        "started",
+        "finished",
+        "_active",
+    )
+    ordering = ("-declared",)
+    list_filter = ("declared", ActiveWarsListFilter)
+    search_fields = ("aggressor", "defender")
+
+    def has_add_permission(self, *args, **kwargs):
+        return False
+
+    def has_change_permission(self, *args, **kwargs) -> bool:
+        return False
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate_active_wars()
+
+    @admin.display(boolean=True, ordering="active")
+    def _active(self, obj) -> bool:
+        return obj.active
 
 
 @admin.register(SyncedCharacter)
