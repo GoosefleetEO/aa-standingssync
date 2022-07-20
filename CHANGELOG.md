@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## [1.4.0] - 2022-07-20
+
+## Added
+
+- Show entities and wars on admin site
+
 ## [1.3.1] - 2022-06-18
 
 ## Changed

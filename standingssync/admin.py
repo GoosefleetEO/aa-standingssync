@@ -1,7 +1,30 @@
 from django.contrib import admin
 
 from . import tasks
-from .models import EveWar, SyncedCharacter, SyncManager
+from .models import EveContact, EveWar, SyncedCharacter, SyncManager
+
+
+@admin.register(EveContact)
+class EveContactAdmin(admin.ModelAdmin):
+    list_display = ("_entity_id", "_entity_category", "standing", "is_war_target")
+    list_display_links = None
+    ordering = ("eve_entity_id",)
+    list_select_related = True
+    list_filter = ("eve_entity__category", "is_war_target")
+
+    def has_add_permission(self, *args, **kwargs):
+        return False
+
+    def has_change_permission(self, *args, **kwargs) -> bool:
+        return False
+
+    @admin.display(ordering="eve_entity_id")
+    def _entity_id(self, obj):
+        return obj.eve_entity_id
+
+    @admin.display(ordering="eve_entity__category")
+    def _entity_category(self, obj):
+        return obj.eve_entity.get_category_display()
 
 
 class ActiveWarsListFilter(admin.SimpleListFilter):
