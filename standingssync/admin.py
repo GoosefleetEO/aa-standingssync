@@ -58,7 +58,7 @@ class EveWarAdmin(admin.ModelAdmin):
     )
     ordering = ("-declared",)
     list_filter = ("declared", ActiveWarsListFilter)
-    search_fields = ("aggressor", "defender")
+    search_fields = ("aggressor__id", "defender__id", "allies__id")
 
     def has_add_permission(self, *args, **kwargs):
         return False
