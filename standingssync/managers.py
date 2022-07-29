@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List
 
 from django.db import models
 from django.db.models import Exists, OuterRef
@@ -8,6 +8,7 @@ from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
 from . import __title__
+from .helpers import extract_id_from_war_participant
 from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
@@ -31,33 +32,33 @@ class EveContactManager(models.Manager):
         return EveContactQuerySet(self.model, using=self._db)
 
 
-class EveEntityManager(models.Manager):
-    def create_from_esi_contact(
-        self, contact_id: int, contact_type: str
-    ) -> models.Model:
-        return self.create(
-            id=contact_id, category=self.model.Category.from_esi_type(contact_type)
-        )
+# class EveEntityManager(models.Manager):
+#     def create_from_esi_contact(
+#         self, contact_id: int, contact_type: str
+#     ) -> models.Model:
+#         return self.create(
+#             id=contact_id, category=self.model.Category.from_esi_type(contact_type)
+#         )
 
-    def get_or_create_from_esi_contact(
-        self, contact_id: int, contact_type: str
-    ) -> models.Model:
-        return self.get_or_create(
-            id=contact_id,
-            defaults={"category": self.model.Category.from_esi_type(contact_type)},
-        )
+#     def get_or_create_from_esi_contact(
+#         self, contact_id: int, contact_type: str
+#     ) -> models.Model:
+#         return self.get_or_create(
+#             id=contact_id,
+#             defaults={"category": self.model.Category.from_esi_type(contact_type)},
+#         )
 
-    def get_or_create_from_esi_info(self, info) -> Tuple[models.Model, bool]:
-        """returns an EveEntity object for the given esi info
-        will return existing or create new one if needed
-        """
-        id = info.get("alliance_id") or info.get("corporation_id")
-        category = (
-            self.model.Category.ALLIANCE
-            if info.get("alliance_id")
-            else self.model.Category.CORPORATION
-        )
-        return self.get_or_create(id=id, defaults={"category": category})
+#     def get_or_create_from_esi_info(self, info) -> Tuple[models.Model, bool]:
+#         """returns an EveEntity object for the given esi info
+#         will return existing or create new one if needed
+#         """
+#         id = info.get("alliance_id") or info.get("corporation_id")
+#         category = (
+#             self.model.Category.ALLIANCE
+#             if info.get("alliance_id")
+#             else self.model.Category.CORPORATION
+#         )
+#         return self.get_or_create(id=id, defaults={"category": category})
 
 
 class EveWarQuerySet(models.QuerySet):
@@ -117,12 +118,12 @@ class EveWarManagerBase(models.Manager):
         try:
             war = self.get(id=id)
         except self.model.DoesNotExist:
-            aggressor = EveEntity.objects.get_or_create_from_esi_info(
-                war_info.get("aggressor")
-            )[0]
-            defender = EveEntity.objects.get_or_create_from_esi_info(
-                war_info.get("defender")
-            )[0]
+            aggressor, _ = EveEntity.objects.get_or_create_esi(
+                id=extract_id_from_war_participant(war_info.get("aggressor"))
+            )
+            defender, _ = EveEntity.objects.get_or_create_esi(
+                id=extract_id_from_war_participant(war_info.get("defender"))
+            )
             war = self.create(
                 id=id,
                 aggressor=aggressor,
@@ -147,7 +148,9 @@ class EveWarManagerBase(models.Manager):
 
         if war_info.get("allies"):
             for ally_info in war_info.get("allies"):
-                eve_entity = EveEntity.objects.get_or_create_from_esi_info(ally_info)[0]
+                eve_entity, _ = EveEntity.objects.get_or_create_esi(
+                    id=extract_id_from_war_participant(ally_info)
+                )
                 war.allies.add(eve_entity)
 
 

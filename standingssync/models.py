@@ -4,9 +4,11 @@ from typing import Optional
 
 from django.db import models, transaction
 from django.utils.timezone import now
-from django.utils.translation import gettext_lazy as _
+
+# from django.utils.translation import gettext_lazy as _
 from esi.errors import TokenExpiredError, TokenInvalidError
 from esi.models import Token
+from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import EveAllianceInfo, EveCharacter
@@ -22,7 +24,8 @@ from .app_settings import (
     STANDINGSSYNC_REPLACE_CONTACTS,
     STANDINGSSYNC_WAR_TARGETS_LABEL_NAME,
 )
-from .managers import EveContactManager, EveEntityManager, EveWarManager
+from .helpers import to_esi_dict
+from .managers import EveContactManager, EveWarManager
 from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
@@ -163,7 +166,7 @@ class SyncManager(_SyncBaseModel):
         if STANDINGSSYNC_ADD_WAR_TARGETS:
             war_targets = EveWar.objects.war_targets(alliance_id)
             for war_target in war_targets:
-                contacts[war_target.id] = war_target.to_esi_dict(-10.0)
+                contacts[war_target.id] = to_esi_dict(war_target, -10.0)
             war_target_ids = {war_target.id for war_target in war_targets}
         else:
             war_target_ids = set()
@@ -188,9 +191,9 @@ class SyncManager(_SyncBaseModel):
                 contacts = [
                     EveContact(
                         manager=self,
-                        eve_entity=EveEntity.objects.get_or_create_from_esi_contact(
-                            contact_id=contact_id, contact_type=contact["contact_type"]
-                        )[0],
+                        eve_entity=EveEntity.objects.get_or_create_esi(id=contact_id)[
+                            0
+                        ],
                         standing=contact["standing"],
                         is_war_target=contact_id in war_target_ids,
                     )
@@ -507,46 +510,46 @@ class AllianceContact(models.Model):
 """
 
 
-class EveEntity(models.Model):
-    """A character, corporation or alliance in Eve Online"""
+# class EveEntity(models.Model):
+#     """A character, corporation or alliance in Eve Online"""
 
-    class Category(models.TextChoices):
-        ALLIANCE = "AL", _("alliance")
-        CORPORATION = "CO", _("corporation")
-        CHARACTER = "CH", _("character")
+#     class Category(models.TextChoices):
+#         ALLIANCE = "AL", _("alliance")
+#         CORPORATION = "CO", _("corporation")
+#         CHARACTER = "CH", _("character")
 
-        @classmethod
-        def to_esi_type(cls, key) -> str:
-            my_map = {
-                cls.ALLIANCE: "alliance",
-                cls.CORPORATION: "corporation",
-                cls.CHARACTER: "character",
-            }
-            return my_map[key]
+#         @classmethod
+#         def to_esi_type(cls, key) -> str:
+#             my_map = {
+#                 cls.ALLIANCE: "alliance",
+#                 cls.CORPORATION: "corporation",
+#                 cls.CHARACTER: "character",
+#             }
+#             return my_map[key]
 
-        @classmethod
-        def from_esi_type(cls, key) -> str:
-            my_map = {
-                "alliance": cls.ALLIANCE,
-                "corporation": cls.CORPORATION,
-                "character": cls.CHARACTER,
-            }
-            return my_map[key]
+#         @classmethod
+#         def from_esi_type(cls, key) -> str:
+#             my_map = {
+#                 "alliance": cls.ALLIANCE,
+#                 "corporation": cls.CORPORATION,
+#                 "character": cls.CHARACTER,
+#             }
+#             return my_map[key]
 
-    id = models.PositiveIntegerField(primary_key=True)
-    category = models.CharField(max_length=2, choices=Category.choices, db_index=True)
+#     id = models.PositiveIntegerField(primary_key=True)
+#     category = models.CharField(max_length=2, choices=Category.choices, db_index=True)
 
-    objects = EveEntityManager()
+#     objects = EveEntityManager()
 
-    def __str__(self) -> str:
-        return f"{self.id}-{self.Category.to_esi_type(self.category)}"
+#     def __str__(self) -> str:
+#         return f"{self.id}-{self.Category.to_esi_type(self.category)}"
 
-    def to_esi_dict(self, standing: float) -> dict:
-        return {
-            "contact_id": self.id,
-            "contact_type": self.Category.to_esi_type(self.category),
-            "standing": standing,
-        }
+#     def to_esi_dict(self, standing: float) -> dict:
+#         return {
+#             "contact_id": self.id,
+#             "contact_type": self.Category.to_esi_type(self.category),
+#             "standing": standing,
+#         }
 
 
 class EveContact(models.Model):
@@ -556,7 +559,7 @@ class EveContact(models.Model):
         SyncManager, on_delete=models.CASCADE, related_name="contacts"
     )
     eve_entity = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="contacts"
+        EveEntity, on_delete=models.CASCADE, related_name="+"
     )
     standing = models.FloatField()
     is_war_target = models.BooleanField()
@@ -574,21 +577,17 @@ class EveContact(models.Model):
         return f"{self.eve_entity}"
 
     def to_esi_dict(self) -> dict:
-        return self.eve_entity.to_esi_dict(self.standing)
+        return to_esi_dict(self.eve_entity, self.standing)
 
 
 class EveWar(models.Model):
     """An EveOnline war"""
 
     id = models.PositiveIntegerField(primary_key=True)
-    aggressor = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="aggressor_war"
-    )
-    allies = models.ManyToManyField(EveEntity, related_name="ally")
+    aggressor = models.ForeignKey(EveEntity, on_delete=models.CASCADE, related_name="+")
+    allies = models.ManyToManyField(EveEntity, related_name="+")
     declared = models.DateTimeField()
-    defender = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="defender_war"
-    )
+    defender = models.ForeignKey(EveEntity, on_delete=models.CASCADE, related_name="+")
     finished = models.DateTimeField(null=True, default=None, db_index=True)
     is_mutual = models.BooleanField()
     is_open_for_allies = models.BooleanField()

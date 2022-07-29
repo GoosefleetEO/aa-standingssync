@@ -1,9 +1,10 @@
 from django.contrib import admin
 from django.db.models import Prefetch
 from django.utils.html import format_html
+from eveuniverse.models import EveEntity
 
 from . import tasks
-from .models import EveContact, EveEntity, EveWar, SyncedCharacter, SyncManager
+from .models import EveContact, EveWar, SyncedCharacter, SyncManager
 
 
 @admin.register(EveContact)

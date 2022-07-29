@@ -1,13 +1,14 @@
 from unittest.mock import patch
 
 from django.test import TestCase
+from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.tests.auth_utils import AuthUtils
 from app_utils.testing import NoSocketsTestCase, generate_invalid_pk
 
 from .. import tasks
-from ..models import EveContact, EveEntity, SyncedCharacter, SyncManager
+from ..models import EveContact, SyncedCharacter, SyncManager
 from . import (
     ALLIANCE_CONTACTS,
     BravadoOperationStub,

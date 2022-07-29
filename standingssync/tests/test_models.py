@@ -7,13 +7,14 @@ from django.test import TestCase
 from django.utils.timezone import now
 from esi.errors import TokenExpiredError, TokenInvalidError
 from esi.models import Token
+from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import EveCharacter
 from allianceauth.tests.auth_utils import AuthUtils
 from app_utils.testing import NoSocketsTestCase
 
-from ..models import EveContact, EveEntity, EveWar, SyncedCharacter, SyncManager
+from ..models import EveContact, EveWar, SyncedCharacter, SyncManager
 from . import (
     ALLIANCE_CONTACTS,
     BravadoOperationStub,
@@ -421,6 +422,7 @@ class TestSyncManager2(NoSocketsTestCase):
         )
         sync_manager = SyncManagerFactory()
         EveWarFactory()
+        EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id)
         # when
         result = sync_manager.update_from_esi()
         # then
@@ -653,9 +655,9 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @staticmethod
     def eve_contact_2_esi_contact(eve_contact):
         map_category_2_type = {
-            EveEntity.Category.CHARACTER: EsiContact.ContactType.CHARACTER,
-            EveEntity.Category.CORPORATION: EsiContact.ContactType.CORPORATION,
-            EveEntity.Category.ALLIANCE: EsiContact.ContactType.ALLIANCE,
+            EveEntity.CATEGORY_CHARACTER: EsiContact.ContactType.CHARACTER,
+            EveEntity.CATEGORY_CORPORATION: EsiContact.ContactType.CORPORATION,
+            EveEntity.CATEGORY_ALLIANCE: EsiContact.ContactType.ALLIANCE,
         }
         return EsiContact(
             contact_id=eve_contact.eve_entity_id,
@@ -1170,26 +1172,6 @@ class TestEveContactManager(LoadTestDataMixin, NoSocketsTestCase):
         self.assertDictEqual(result, expected)
 
 
-class TestEveEntityManagerGetOrCreateFromEsiInfo(NoSocketsTestCase):
-    def test_should_return_corporation(self):
-        # given
-        info = {"corporation_id": 2001}
-        # when
-        obj, created = EveEntity.objects.get_or_create_from_esi_info(info)
-        # then
-        self.assertEqual(obj.id, 2001)
-        self.assertEqual(obj.category, EveEntity.Category.CORPORATION)
-
-    def test_should_return_alliance(self):
-        # given
-        info = {"alliance_id": 3001}
-        # when
-        obj, created = EveEntity.objects.get_or_create_from_esi_info(info)
-        # then
-        self.assertEqual(obj.id, 3001)
-        self.assertEqual(obj.category, EveEntity.Category.ALLIANCE)
-
-
 class TestEveWarManagerActiveWars(NoSocketsTestCase):
     def test_should_return_started_war_as_defender(self):
         # given
@@ -1288,6 +1270,8 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
             is_open_for_allies=False,
         )
         war.allies.add(EveEntity.objects.get(id=3012))
+        EveEntityAllianceFactory(id=3002)
+        EveEntityAllianceFactory(id=3003)
 
     def test_should_return_defender_and_allies_for_aggressor(self):
         # when
@@ -1507,35 +1491,3 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
         self.assertTrue(war.is_open_for_allies)
         self.assertEqual(war.retracted, retracted)
         self.assertEqual(war.started, self.war_started)
-
-
-class TestEveEntity(LoadTestDataMixin, NoSocketsTestCase):
-    def test_should_return_esi_dict_for_character(self):
-        # given
-        obj = EveEntity.objects.get(id=1001)
-        # when
-        result = obj.to_esi_dict(5.0)
-        # then
-        self.assertDictEqual(
-            result, {"contact_id": 1001, "contact_type": "character", "standing": 5.0}
-        )
-
-    def test_should_return_esi_dict_for_corporation(self):
-        # given
-        obj = EveEntity.objects.get(id=2001)
-        # when
-        result = obj.to_esi_dict(2.0)
-        # then
-        self.assertDictEqual(
-            result, {"contact_id": 2001, "contact_type": "corporation", "standing": 2.0}
-        )
-
-    def test_should_return_esi_dict_for_alliance(self):
-        # given
-        obj = EveEntity.objects.get(id=3001)
-        # when
-        result = obj.to_esi_dict(-2.0)
-        # then
-        self.assertDictEqual(
-            result, {"contact_id": 3001, "contact_type": "alliance", "standing": -2.0}
-        )

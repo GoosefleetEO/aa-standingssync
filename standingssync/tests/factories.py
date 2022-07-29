@@ -4,6 +4,7 @@ import factory
 import factory.fuzzy
 
 from django.utils.timezone import now
+from eveuniverse.models import EveEntity
 
 from app_utils.testdata_factories import (
     EveAllianceInfoFactory,
@@ -12,39 +13,43 @@ from app_utils.testdata_factories import (
     UserMainFactory,
 )
 
-from ..models import EveContact, EveEntity, EveWar, SyncedCharacter, SyncManager
+from ..models import EveContact, EveWar, SyncedCharacter, SyncManager
 
 
 class EveEntityFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = EveEntity
+        django_get_or_create = ("id", "name")
 
-    category = EveEntity.Category.CHARACTER
+    category = EveEntity.CATEGORY_CHARACTER
 
     @factory.lazy_attribute
     def id(self):
-        if self.category == EveEntity.Category.CHARACTER:
+        if self.category == EveEntity.CATEGORY_CHARACTER:
             obj = EveCharacterFactory()
             return obj.character_id
-        if self.category == EveEntity.Category.CORPORATION:
+        if self.category == EveEntity.CATEGORY_CORPORATION:
             obj = EveCorporationInfoFactory()
             return obj.corporation_id
-        if self.category == EveEntity.Category.ALLIANCE:
+        if self.category == EveEntity.CATEGORY_ALLIANCE:
             obj = EveAllianceInfoFactory()
             return obj.alliance_id
         raise NotImplementedError(f"Unknown category: {self.category}")
 
 
 class EveEntityCharacterFactory(EveEntityFactory):
-    category = EveEntity.Category.CHARACTER
+    name = factory.Faker("name")
+    category = EveEntity.CATEGORY_CHARACTER
 
 
 class EveEntityCorporationFactory(EveEntityFactory):
-    category = EveEntity.Category.CORPORATION
+    name = factory.Faker("company")
+    category = EveEntity.CATEGORY_CORPORATION
 
 
 class EveEntityAllianceFactory(EveEntityFactory):
-    category = EveEntity.Category.ALLIANCE
+    name = factory.Faker("company")
+    category = EveEntity.CATEGORY_ALLIANCE
 
 
 class EveWarFactory(factory.django.DjangoModelFactory):

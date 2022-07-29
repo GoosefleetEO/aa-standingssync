@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## Changed
+
+- Migrated proprietary EveEntity to EveUniverse's EveEntity to enable ID to Name resolution
+
 ## [1.4.1] - 2022-07-90
 
 ## Added
