@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
+## [1.4.1] - 2022-07-90
+
+## Added
+
+- Show allies on EveWar admin site
+
+## Fixed
+
+- Search on EveWar page does not work
+
 ## [1.4.0] - 2022-07-20
 
 ## Added
