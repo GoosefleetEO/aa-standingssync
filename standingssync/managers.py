@@ -8,7 +8,6 @@ from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
 from . import __title__
-from .helpers import extract_id_from_war_participant
 from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
@@ -90,10 +89,10 @@ class EveWarManagerBase(models.Manager):
             war = self.get(id=id)
         except self.model.DoesNotExist:
             aggressor, _ = EveEntity.objects.get_or_create(
-                id=extract_id_from_war_participant(war_info.get("aggressor"))
+                id=self._extract_id_from_war_participant(war_info.get("aggressor"))
             )
             defender, _ = EveEntity.objects.get_or_create(
-                id=extract_id_from_war_participant(war_info.get("defender"))
+                id=self._extract_id_from_war_participant(war_info.get("defender"))
             )
             war = self.create(
                 id=id,
@@ -120,9 +119,17 @@ class EveWarManagerBase(models.Manager):
         if war_info.get("allies"):
             for ally_info in war_info.get("allies"):
                 eve_entity, _ = EveEntity.objects.get_or_create(
-                    id=extract_id_from_war_participant(ally_info)
+                    id=self._extract_id_from_war_participant(ally_info)
                 )
                 war.allies.add(eve_entity)
+
+    @staticmethod
+    def _extract_id_from_war_participant(participant: dict) -> int:
+        alliance_id = participant.get("alliance_id")
+        corporation_id = participant.get("corporation_id")
+        if not alliance_id and not corporation_id:
+            raise ValueError(f"Invalid participant: {participant}")
+        return alliance_id or corporation_id
 
 
 EveWarManager = EveWarManagerBase.from_queryset(EveWarQuerySet)

@@ -4,8 +4,6 @@ from typing import Optional
 
 from django.db import models, transaction
 from django.utils.timezone import now
-
-# from django.utils.translation import gettext_lazy as _
 from esi.errors import TokenExpiredError, TokenInvalidError
 from esi.models import Token
 from eveuniverse.models import EveEntity
@@ -24,7 +22,6 @@ from .app_settings import (
     STANDINGSSYNC_REPLACE_CONTACTS,
     STANDINGSSYNC_WAR_TARGETS_LABEL_NAME,
 )
-from .helpers import to_esi_dict
 from .managers import EveContactManager, EveWarManager
 from .providers import esi
 
@@ -166,7 +163,7 @@ class SyncManager(_SyncBaseModel):
         if STANDINGSSYNC_ADD_WAR_TARGETS:
             war_targets = EveWar.objects.war_targets(alliance_id)
             for war_target in war_targets:
-                contacts[war_target.id] = to_esi_dict(war_target, -10.0)
+                contacts[war_target.id] = self._to_esi_dict(war_target, -10.0)
             war_target_ids = {war_target.id for war_target in war_targets}
         else:
             war_target_ids = set()
@@ -201,6 +198,15 @@ class SyncManager(_SyncBaseModel):
         else:
             logger.info("%s: Alliance contacts are unchanged.", self)
         return new_version_hash
+
+    @staticmethod
+    def _to_esi_dict(eve_entity: EveEntity, standing: float) -> dict:
+        """Convert EveEntity to ESI contact dict."""
+        return {
+            "contact_id": eve_entity.id,
+            "contact_type": eve_entity.category,
+            "standing": standing,
+        }
 
     @classmethod
     def get_esi_scopes(cls) -> list:
@@ -502,9 +508,6 @@ class EveContact(models.Model):
 
     def __str__(self):
         return f"{self.eve_entity}"
-
-    def to_esi_dict(self) -> dict:
-        return to_esi_dict(self.eve_entity, self.standing)
 
 
 class EveWar(models.Model):
