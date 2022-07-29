@@ -1,5 +1,7 @@
 from celery import shared_task
 
+from eveuniverse.models import EveEntity
+
 from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
@@ -42,6 +44,8 @@ def run_manager_sync(manager_pk: int, force_sync: bool = False) -> bool:
         logger.debug("Unexpected exception occurred", exc_info=True)
         sync_manager.set_sync_status(sync_manager.Error.UNKNOWN)
         return False
+    else:
+        EveEntity.objects.bulk_update_new_esi()
 
     if not new_version_hash:
         return False
@@ -93,3 +97,4 @@ def update_all_wars():
 @shared_task
 def update_war(war_id: int):
     EveWar.objects.update_from_esi(war_id)
+    EveEntity.objects.bulk_update_new_esi()

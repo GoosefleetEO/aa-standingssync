@@ -32,35 +32,6 @@ class EveContactManager(models.Manager):
         return EveContactQuerySet(self.model, using=self._db)
 
 
-# class EveEntityManager(models.Manager):
-#     def create_from_esi_contact(
-#         self, contact_id: int, contact_type: str
-#     ) -> models.Model:
-#         return self.create(
-#             id=contact_id, category=self.model.Category.from_esi_type(contact_type)
-#         )
-
-#     def get_or_create_from_esi_contact(
-#         self, contact_id: int, contact_type: str
-#     ) -> models.Model:
-#         return self.get_or_create(
-#             id=contact_id,
-#             defaults={"category": self.model.Category.from_esi_type(contact_type)},
-#         )
-
-#     def get_or_create_from_esi_info(self, info) -> Tuple[models.Model, bool]:
-#         """returns an EveEntity object for the given esi info
-#         will return existing or create new one if needed
-#         """
-#         id = info.get("alliance_id") or info.get("corporation_id")
-#         category = (
-#             self.model.Category.ALLIANCE
-#             if info.get("alliance_id")
-#             else self.model.Category.CORPORATION
-#         )
-#         return self.get_or_create(id=id, defaults={"category": category})
-
-
 class EveWarQuerySet(models.QuerySet):
     def annotate_active_wars(self) -> models.QuerySet:
         from .models import EveWar
@@ -118,10 +89,10 @@ class EveWarManagerBase(models.Manager):
         try:
             war = self.get(id=id)
         except self.model.DoesNotExist:
-            aggressor, _ = EveEntity.objects.get_or_create_esi(
+            aggressor, _ = EveEntity.objects.get_or_create(
                 id=extract_id_from_war_participant(war_info.get("aggressor"))
             )
-            defender, _ = EveEntity.objects.get_or_create_esi(
+            defender, _ = EveEntity.objects.get_or_create(
                 id=extract_id_from_war_participant(war_info.get("defender"))
             )
             war = self.create(
@@ -148,7 +119,7 @@ class EveWarManagerBase(models.Manager):
 
         if war_info.get("allies"):
             for ally_info in war_info.get("allies"):
-                eve_entity, _ = EveEntity.objects.get_or_create_esi(
+                eve_entity, _ = EveEntity.objects.get_or_create(
                     id=extract_id_from_war_participant(ally_info)
                 )
                 war.allies.add(eve_entity)

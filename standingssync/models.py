@@ -191,19 +191,15 @@ class SyncManager(_SyncBaseModel):
                 contacts = [
                     EveContact(
                         manager=self,
-                        eve_entity=EveEntity.objects.get_or_create_esi(id=contact_id)[
-                            0
-                        ],
+                        eve_entity=EveEntity.objects.get_or_create(id=contact_id)[0],
                         standing=contact["standing"],
                         is_war_target=contact_id in war_target_ids,
                     )
                     for contact_id, contact in contacts.items()
                 ]
                 EveContact.objects.bulk_create(contacts, batch_size=500)
-
         else:
             logger.info("%s: Alliance contacts are unchanged.", self)
-
         return new_version_hash
 
     @classmethod
@@ -236,13 +232,10 @@ class SyncedCharacter(_SyncBaseModel):
 
     def get_status_message(self):
         if self.last_error != self.Error.NONE:
-            message = self.get_last_error_display()
+            return self.get_last_error_display()
         elif self.last_sync is not None:
-            message = "OK"
-        else:
-            message = "Not synced yet"
-
-        return message
+            return "OK"
+        return "Not synced yet"
 
     def update(self, force_sync: bool = False) -> bool:
         """updates in-game contacts for given character
@@ -484,72 +477,6 @@ class SyncedCharacter(_SyncBaseModel):
     @staticmethod
     def get_esi_scopes() -> list:
         return ["esi-characters.read_contacts.v1", "esi-characters.write_contacts.v1"]
-
-
-"""
-class AllianceContact(models.Model):
-
-    manager = models.ForeignKey(
-        SyncManager, on_delete=models.CASCADE, related_name="contacts"
-    )
-    contact_id = models.PositiveIntegerField(db_index=True)
-    contact_type = models.CharField(max_length=32)
-    standing = models.FloatField()
-
-    objects = AllianceContactManager()
-
-    def __str__(self):
-        return "{}:{}".format(self.contact_type, self.contact_id)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["manager", "contact_id"], name="manager-contacts-unq"
-            )
-        ]
-"""
-
-
-# class EveEntity(models.Model):
-#     """A character, corporation or alliance in Eve Online"""
-
-#     class Category(models.TextChoices):
-#         ALLIANCE = "AL", _("alliance")
-#         CORPORATION = "CO", _("corporation")
-#         CHARACTER = "CH", _("character")
-
-#         @classmethod
-#         def to_esi_type(cls, key) -> str:
-#             my_map = {
-#                 cls.ALLIANCE: "alliance",
-#                 cls.CORPORATION: "corporation",
-#                 cls.CHARACTER: "character",
-#             }
-#             return my_map[key]
-
-#         @classmethod
-#         def from_esi_type(cls, key) -> str:
-#             my_map = {
-#                 "alliance": cls.ALLIANCE,
-#                 "corporation": cls.CORPORATION,
-#                 "character": cls.CHARACTER,
-#             }
-#             return my_map[key]
-
-#     id = models.PositiveIntegerField(primary_key=True)
-#     category = models.CharField(max_length=2, choices=Category.choices, db_index=True)
-
-#     objects = EveEntityManager()
-
-#     def __str__(self) -> str:
-#         return f"{self.id}-{self.Category.to_esi_type(self.category)}"
-
-#     def to_esi_dict(self, standing: float) -> dict:
-#         return {
-#             "contact_id": self.id,
-#             "contact_type": self.Category.to_esi_type(self.category),
-#             "standing": standing,
-#         }
 
 
 class EveContact(models.Model):
