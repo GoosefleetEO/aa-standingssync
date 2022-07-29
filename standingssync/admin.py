@@ -121,8 +121,8 @@ class SyncedCharacterAdmin(admin.ModelAdmin):
         "last_error",
         "version_hash",
         "last_sync",
-        "character_ownership__user",
-        "manager",
+        ("character_ownership__user", admin.RelatedOnlyFieldListFilter),
+        ("manager", admin.RelatedOnlyFieldListFilter),
     )
     actions = ["start_sync_contacts"]
     list_display_links = None
@@ -174,6 +174,7 @@ class SyncManagerAdmin(admin.ModelAdmin):
         "last_error",
     )
     list_display_links = None
+    list_filter = (("character_ownership__user", admin.RelatedOnlyFieldListFilter),)
     actions = ["start_sync_managers"]
 
     def get_queryset(self, request):
@@ -187,12 +188,15 @@ class SyncManagerAdmin(admin.ModelAdmin):
     def _sync_ok(self, obj) -> bool:
         return obj.is_sync_ok
 
+    @admin.display(ordering="character_ownership__user__username")
     def _user(self, obj):
         return obj.character_ownership.user if obj.character_ownership else None
 
+    @admin.display(ordering="character_ownership__character__character_name")
     def _character_name(self, obj):
-        return obj.__str__()
+        return obj.character_ownership.character.character_name
 
+    @admin.display(ordering="alliance__alliance_name")
     def _alliance_name(self, obj):
         return obj.alliance.alliance_name
 
