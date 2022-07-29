@@ -20,6 +20,12 @@ from . import (
     LoadTestDataMixin,
     create_test_user,
 )
+from .factories import (
+    EveContactWarTargetFactory,
+    EveEntityAllianceFactory,
+    EveWarFactory,
+    SyncManagerFactory,
+)
 
 MODELS_PATH = "standingssync.models"
 MANAGERS_PATH = "standingssync.managers"
@@ -329,6 +335,64 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
         )
         self.assertSetEqual(expected_contact_ids, result_contact_ids)
         return sync_manager
+
+
+@patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", True)
+@patch(MODELS_PATH + ".esi")
+class TestSyncManager2(NoSocketsTestCase):
+    def test_should_add_war_target_contact_defender(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id)
+        )
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        contact = EveContact.objects.get(eve_entity__id=war.aggressor.id)
+        self.assertTrue(contact.is_war_target)
+
+    def test_should_add_war_target_contact_ally(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            allies=[EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id)]
+        )
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        contact = EveContact.objects.get(eve_entity__id=war.aggressor.id)
+        self.assertTrue(contact.is_war_target)
+
+    def test_remove_outdated_war_target_contacts(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            finished=now(),
+        )
+        EveContactWarTargetFactory(manager=sync_manager, eve_entity=war.aggressor)
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        self.assertFalse(
+            EveContact.objects.filter(eve_entity__id=war.aggressor.id).exists()
+        )
 
 
 class EsiContact:
@@ -1074,53 +1138,67 @@ class TestEveEntityManagerGetOrCreateFromEsiInfo(NoSocketsTestCase):
         self.assertEqual(obj.category, EveEntity.Category.ALLIANCE)
 
 
-class TestEveWarManagerActiveWars(LoadTestDataMixin, NoSocketsTestCase):
-    def test_should_return_started_war(self):
+class TestEveWarManagerActiveWars(NoSocketsTestCase):
+    def test_should_return_started_war_as_defender(self):
         # given
-        EveWar.objects.create(
-            id=8,
-            aggressor=EveEntity.objects.get(id=3011),
-            defender=EveEntity.objects.get(id=3001),
-            declared=now() - dt.timedelta(days=3),
-            started=now() - dt.timedelta(days=2),
-            is_mutual=False,
-            is_open_for_allies=False,
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            declared=now() - dt.timedelta(days=2),
         )
         # when
         result = EveWar.objects.active_wars()
         # then
         self.assertEqual(result.count(), 1)
-        self.assertEqual(result.first().id, 8)
+        self.assertEqual(result.first(), war)
+
+    def test_should_return_started_war_as_attacker(self):
+        # given
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            aggressor=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            declared=now() - dt.timedelta(days=2),
+        )
+        # when
+        result = EveWar.objects.active_wars()
+        # then
+        self.assertEqual(result.count(), 1)
+        self.assertEqual(result.first(), war)
+
+    def test_should_return_started_war_as_ally(self):
+        # given
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            allies=[EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id)],
+            declared=now() - dt.timedelta(days=2),
+        )
+        # when
+        result = EveWar.objects.active_wars()
+        # then
+        self.assertEqual(result.count(), 1)
+        self.assertEqual(result.first(), war)
 
     def test_should_return_war_about_to_finish(self):
         # given
-        EveWar.objects.create(
-            id=8,
-            aggressor=EveEntity.objects.get(id=3011),
-            defender=EveEntity.objects.get(id=3001),
-            declared=now() - dt.timedelta(days=3),
-            started=now() - dt.timedelta(days=2),
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            declared=now() - dt.timedelta(days=2),
             finished=now() + dt.timedelta(days=1),
-            is_mutual=False,
-            is_open_for_allies=False,
         )
         # when
         result = EveWar.objects.active_wars()
         # then
         self.assertEqual(result.count(), 1)
-        self.assertEqual(result.first().id, 8)
+        self.assertEqual(result.first(), war)
 
     def test_should_not_return_finished_war(self):
         # given
-        EveWar.objects.create(
-            id=8,
-            aggressor=EveEntity.objects.get(id=3011),
-            defender=EveEntity.objects.get(id=3001),
-            declared=now() - dt.timedelta(days=3),
-            started=now() - dt.timedelta(days=2),
+        sync_manager = SyncManagerFactory()
+        EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            declared=now() - dt.timedelta(days=2),
             finished=now() - dt.timedelta(days=1),
-            is_mutual=False,
-            is_open_for_allies=False,
         )
         # when
         result = EveWar.objects.active_wars()
@@ -1129,14 +1207,11 @@ class TestEveWarManagerActiveWars(LoadTestDataMixin, NoSocketsTestCase):
 
     def test_should_not_return_war_not_yet_started(self):
         # given
-        EveWar.objects.create(
-            id=8,
-            aggressor=EveEntity.objects.get(id=3011),
-            defender=EveEntity.objects.get(id=3001),
+        sync_manager = SyncManagerFactory()
+        EveWarFactory(
+            defender=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
             declared=now() - dt.timedelta(days=1),
             started=now() + dt.timedelta(hours=4),
-            is_mutual=False,
-            is_open_for_allies=False,
         )
         # when
         result = EveWar.objects.active_wars()
