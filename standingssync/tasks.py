@@ -1,12 +1,12 @@
 from celery import shared_task
 
+from eveuniverse.core.esitools import is_esi_online
 from eveuniverse.models import EveEntity
 
 from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
 from . import __title__
-from .helpers import is_esi_online
 from .models import EveWar, SyncedCharacter, SyncManager
 from .providers import esi
 

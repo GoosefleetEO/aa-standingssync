@@ -8,12 +8,11 @@ from esi.models import Token
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import EveCharacter
-from allianceauth.tests.auth_utils import AuthUtils
-from app_utils.testing import NoSocketsTestCase
+from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
 from .. import views
 from ..models import EveContact, EveEntity, SyncedCharacter, SyncManager
-from . import ALLIANCE_CONTACTS, LoadTestDataMixin, create_test_user
+from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 
 MODULE_PATH = "standingssync.views"
 
@@ -24,9 +23,8 @@ class TestMainScreen(LoadTestDataMixin, TestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
+        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+            cls.character_1.character_id
         )
         # sync manager with contacts
         cls.sync_manager = SyncManager.objects.create(
@@ -43,12 +41,12 @@ class TestMainScreen(LoadTestDataMixin, TestCase):
             )
 
         # user 2 is a normal user and has two alts and permission
-        cls.user_2 = create_test_user(cls.character_2)
+        cls.user_2, _ = create_user_from_evecharacter(
+            cls.character_2.character_id,
+            permissions=["standingssync.add_syncedcharacter"],
+        )
         cls.alt_ownership_1 = CharacterOwnership.objects.create(
             character=cls.character_4, owner_hash="x4", user=cls.user_2
-        )
-        AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncedcharacter", cls.user_2
         )
         cls.user_2 = User.objects.get(pk=cls.user_2.pk)
         cls.sync_char = SyncedCharacter.objects.create(
@@ -56,7 +54,7 @@ class TestMainScreen(LoadTestDataMixin, TestCase):
         )
 
         # user 3 has no permission
-        cls.user_3 = create_test_user(cls.character_3)
+        cls.user_3, _ = create_user_from_evecharacter(cls.character_3.character_id)
         cls.factory = RequestFactory()
 
     def test_user_with_permission_can_open_app(self):
@@ -97,9 +95,8 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
+        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+            cls.character_1.character_id, permissions=["standingssync.add_syncmanager"]
         )
         # sync manager with contacts
         cls.sync_manager = SyncManager.objects.create(
@@ -116,7 +113,10 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
             )
 
         # user 2 is a normal user and has three alts
-        cls.user_2 = create_test_user(cls.character_2)
+        cls.user_2, _ = create_user_from_evecharacter(
+            cls.character_2.character_id,
+            permissions=["standingssync.add_syncedcharacter"],
+        )
         cls.alt_ownership_1 = CharacterOwnership.objects.create(
             character=cls.character_4, owner_hash="x4", user=cls.user_2
         )
@@ -125,9 +125,6 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
         )
         CharacterOwnership.objects.create(
             character=cls.character_6, owner_hash="x6", user=cls.user_2
-        )
-        AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncedcharacter", cls.user_2
         )
         cls.factory = RequestFactory()
 
@@ -217,14 +214,14 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
             alliance_id=3098,
             alliance_name="Joker Alliance",
         )
-        my_user = create_test_user(my_char)
+        my_user, _ = create_user_from_evecharacter(my_char.character_id)
         with self.assertRaises(RuntimeError):
             self.make_request(my_user, self.character_4)
 
     def test_raises_exception_if_no_sync_manager_for_alliance(
         self, mock_messages_plus, mock_run_character_sync
     ):
-        my_user = create_test_user(self.character_3)
+        my_user, _ = create_user_from_evecharacter(self.character_3.character_id)
         with self.assertRaises(RuntimeError):
             self.make_request(my_user, self.character_4)
 
@@ -237,9 +234,12 @@ class TestAddAllianceManager(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
+        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+            cls.character_1.character_id,
+            permissions=[
+                "standingssync.add_syncmanager",
+                "standingssync.add_syncedcharacter",
+            ],
         )
         # sync manager with contacts
         cls.sync_manager = SyncManager.objects.create(
@@ -254,23 +254,17 @@ class TestAddAllianceManager(LoadTestDataMixin, NoSocketsTestCase):
                 standing=contact["standing"],
                 is_war_target=False,
             )
-        AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncedcharacter", cls.user_1
-        )
-        AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncmanager", cls.user_1
-        )
 
         # user 2 is a normal user and has two alts
-        cls.user_2 = create_test_user(cls.character_2)
+        cls.user_2, _ = create_user_from_evecharacter(
+            cls.character_2.character_id,
+            permissions=["standingssync.add_syncedcharacter"],
+        )
         cls.alt_ownership_1 = CharacterOwnership.objects.create(
             character=cls.character_4, owner_hash="x4", user=cls.user_2
         )
         cls.alt_ownership_2 = CharacterOwnership.objects.create(
             character=cls.character_5, owner_hash="x5", user=cls.user_2
-        )
-        AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncedcharacter", cls.user_2
         )
         cls.factory = RequestFactory()
 

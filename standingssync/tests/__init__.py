@@ -1,42 +1,13 @@
 """Utility functions and classes for tests"""
 
-from django.contrib.auth.models import User
+
 from eveuniverse.models import EveEntity
 
-from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import (
     EveAllianceInfo,
     EveCharacter,
     EveCorporationInfo,
 )
-from allianceauth.tests.auth_utils import AuthUtils
-
-
-class BravadoOperationStub:
-    """Stub to simulate the operation object return from bravado via django-esi"""
-
-    class RequestConfig:
-        def __init__(self, also_return_response):
-            self.also_return_response = also_return_response
-
-    class ResponseStub:
-        def __init__(self, headers):
-            self.headers = headers
-
-    def __init__(self, data, headers: dict = None, also_return_response: bool = False):
-        self._data = data
-        self._headers = headers if headers else {"x-pages": 1}
-        self.request_config = BravadoOperationStub.RequestConfig(also_return_response)
-
-    def result(self, **kwargs):
-        if self.request_config.also_return_response:
-            return [self._data, self.ResponseStub(self._headers)]
-        else:
-            return self._data
-
-    def results(self, **kwargs):
-        return self.result(**kwargs)
-
 
 ALLIANCE_CONTACTS = [
     {"contact_id": 1002, "contact_type": "character", "standing": 10.0},
@@ -75,20 +46,6 @@ def load_eve_entities():
                 "name": f"dummy_{info['contact_id']}",
             },
         )
-
-
-def add_main_to_user(user: User, character: EveCharacter):
-    CharacterOwnership.objects.create(
-        user=user, owner_hash="x1" + character.character_name, character=character
-    )
-    user.profile.main_character = character
-    user.profile.save()
-
-
-def create_test_user(character: EveCharacter) -> User:
-    user = AuthUtils.create_user(character.character_name)
-    add_main_to_user(user, character)
-    return user
 
 
 class LoadTestDataMixin:
