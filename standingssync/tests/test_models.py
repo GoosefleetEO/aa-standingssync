@@ -337,10 +337,52 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
         return sync_manager
 
 
+def fetch_war_targets():
+    return set(
+        EveContact.objects.filter(is_war_target=True).values_list(
+            "eve_entity_id", flat=True
+        )
+    )
+
+
 @patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", True)
 @patch(MODELS_PATH + ".esi")
 class TestSyncManager2(NoSocketsTestCase):
-    def test_should_add_war_target_contact_defender(self, mock_esi):
+    def test_should_add_war_target_contact_as_aggressor_1(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        war = EveWarFactory(
+            aggressor=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id)
+        )
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        self.assertSetEqual(fetch_war_targets(), {war.defender.id})
+
+    def test_should_add_war_target_contact_as_aggressor_2(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        ally = EveEntityAllianceFactory()
+        war = EveWarFactory(
+            aggressor=EveEntityAllianceFactory(id=sync_manager.alliance.alliance_id),
+            allies=[ally],
+        )
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        self.assertSetEqual(fetch_war_targets(), {war.defender.id, ally.id})
+
+    def test_should_add_war_target_contact_as_defender(self, mock_esi):
         # given
         mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
             BravadoOperationStub([])
@@ -354,10 +396,9 @@ class TestSyncManager2(NoSocketsTestCase):
         # then
         self.assertTrue(result)
         sync_manager.refresh_from_db()
-        contact = EveContact.objects.get(eve_entity__id=war.aggressor.id)
-        self.assertTrue(contact.is_war_target)
+        self.assertSetEqual(fetch_war_targets(), {war.aggressor.id})
 
-    def test_should_add_war_target_contact_ally(self, mock_esi):
+    def test_should_add_war_target_contact_as_ally(self, mock_esi):
         # given
         mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
             BravadoOperationStub([])
@@ -371,8 +412,21 @@ class TestSyncManager2(NoSocketsTestCase):
         # then
         self.assertTrue(result)
         sync_manager.refresh_from_db()
-        contact = EveContact.objects.get(eve_entity__id=war.aggressor.id)
-        self.assertTrue(contact.is_war_target)
+        self.assertSetEqual(fetch_war_targets(), {war.aggressor.id})
+
+    def test_should_not_add_war_target_contact_from_unrelated_war(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        sync_manager = SyncManagerFactory()
+        EveWarFactory()
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
+        sync_manager.refresh_from_db()
+        self.assertSetEqual(fetch_war_targets(), set())
 
     def test_remove_outdated_war_target_contacts(self, mock_esi):
         # given
@@ -390,9 +444,7 @@ class TestSyncManager2(NoSocketsTestCase):
         # then
         self.assertTrue(result)
         sync_manager.refresh_from_db()
-        self.assertFalse(
-            EveContact.objects.filter(eve_entity__id=war.aggressor.id).exists()
-        )
+        self.assertSetEqual(fetch_war_targets(), set())
 
 
 class EsiContact:
