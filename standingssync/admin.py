@@ -1,7 +1,9 @@
 from django.contrib import admin
+from django.db.models import Prefetch
+from django.utils.html import format_html
 
 from . import tasks
-from .models import EveContact, EveWar, SyncedCharacter, SyncManager
+from .models import EveContact, EveEntity, EveWar, SyncedCharacter, SyncManager
 
 
 @admin.register(EveContact)
@@ -45,6 +47,10 @@ class ActiveWarsListFilter(admin.SimpleListFilter):
         return queryset
 
 
+class AlliesInline(admin.TabularInline):
+    model = EveWar.allies.through
+
+
 @admin.register(EveWar)
 class EveWarAdmin(admin.ModelAdmin):
     list_display = (
@@ -52,6 +58,7 @@ class EveWarAdmin(admin.ModelAdmin):
         "declared",
         "aggressor",
         "defender",
+        "_allies",
         "started",
         "finished",
         "_active",
@@ -59,6 +66,7 @@ class EveWarAdmin(admin.ModelAdmin):
     ordering = ("-declared",)
     list_filter = ("declared", ActiveWarsListFilter)
     search_fields = ("aggressor__id", "defender__id", "allies__id")
+    inlines = (AlliesInline,)
 
     def has_add_permission(self, *args, **kwargs):
         return False
@@ -68,11 +76,18 @@ class EveWarAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate_active_wars()
+        return qs.prefetch_related(
+            Prefetch("allies", queryset=EveEntity.objects.select_related())
+        ).annotate_active_wars()
 
     @admin.display(boolean=True, ordering="active")
     def _active(self, obj) -> bool:
         return obj.active
+
+    @admin.display()
+    def _allies(self, obj):
+        allies = sorted([str(ally) for ally in obj.allies.all()])
+        return format_html("<br>".join(allies)) if allies else "-"
 
 
 @admin.register(SyncedCharacter)
