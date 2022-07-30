@@ -4,9 +4,9 @@ from typing import Optional
 
 from django.db import models, transaction
 from django.utils.timezone import now
-from django.utils.translation import gettext_lazy as _
 from esi.errors import TokenExpiredError, TokenInvalidError
 from esi.models import Token
+from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import EveAllianceInfo, EveCharacter
@@ -22,7 +22,7 @@ from .app_settings import (
     STANDINGSSYNC_REPLACE_CONTACTS,
     STANDINGSSYNC_WAR_TARGETS_LABEL_NAME,
 )
-from .managers import EveContactManager, EveEntityManager, EveWarManager
+from .managers import EveContactManager, EveWarManager
 from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
@@ -163,13 +163,13 @@ class SyncManager(_SyncBaseModel):
         if STANDINGSSYNC_ADD_WAR_TARGETS:
             war_targets = EveWar.objects.war_targets(alliance_id)
             for war_target in war_targets:
-                contacts[war_target.id] = war_target.to_esi_dict(-10.0)
+                contacts[war_target.id] = self._to_esi_dict(war_target, -10.0)
             war_target_ids = {war_target.id for war_target in war_targets}
         else:
             war_target_ids = set()
 
         # determine if contacts have changed by comparing their hashes
-        new_version_hash = hashlib.md5(json.dumps(contacts).encode("utf-8")).hexdigest()
+        new_version_hash = self._calculate_version_hash(contacts)
         if force_sync or new_version_hash != self.version_hash:
             logger.info(
                 "%s: Storing alliance update with %d contacts", self, len(contacts)
@@ -188,20 +188,30 @@ class SyncManager(_SyncBaseModel):
                 contacts = [
                     EveContact(
                         manager=self,
-                        eve_entity=EveEntity.objects.get_or_create_from_esi_contact(
-                            contact_id=contact_id, contact_type=contact["contact_type"]
-                        )[0],
+                        eve_entity=EveEntity.objects.get_or_create(id=contact_id)[0],
                         standing=contact["standing"],
                         is_war_target=contact_id in war_target_ids,
                     )
                     for contact_id, contact in contacts.items()
                 ]
                 EveContact.objects.bulk_create(contacts, batch_size=500)
-
         else:
             logger.info("%s: Alliance contacts are unchanged.", self)
-
         return new_version_hash
+
+    @staticmethod
+    def _to_esi_dict(eve_entity: EveEntity, standing: float) -> dict:
+        """Convert EveEntity to ESI contact dict."""
+        return {
+            "contact_id": eve_entity.id,
+            "contact_type": eve_entity.category,
+            "standing": standing,
+        }
+
+    @staticmethod
+    def _calculate_version_hash(contacts: dict) -> str:
+        """Calculate hash for contacts."""
+        return hashlib.md5(json.dumps(contacts).encode("utf-8")).hexdigest()
 
     @classmethod
     def get_esi_scopes(cls) -> list:
@@ -233,13 +243,10 @@ class SyncedCharacter(_SyncBaseModel):
 
     def get_status_message(self):
         if self.last_error != self.Error.NONE:
-            message = self.get_last_error_display()
+            return self.get_last_error_display()
         elif self.last_sync is not None:
-            message = "OK"
-        else:
-            message = "Not synced yet"
-
-        return message
+            return "OK"
+        return "Not synced yet"
 
     def update(self, force_sync: bool = False) -> bool:
         """updates in-game contacts for given character
@@ -275,6 +282,10 @@ class SyncedCharacter(_SyncBaseModel):
         if not token:
             return False
 
+        if not self.manager.contacts.exists():
+            logger.info("%s: No contacts to sync", self)
+            return True
+
         character_eff_standing = self.manager.get_effective_standing(
             self.character_ownership.character
         )
@@ -305,16 +316,7 @@ class SyncedCharacter(_SyncBaseModel):
         labels_raw = esi.client.Contacts.get_characters_character_id_contacts_labels(
             character_id=character_id, token=token.valid_access_token()
         ).results()
-        for row in labels_raw:
-            if (
-                row.get("label_name").lower()
-                == STANDINGSSYNC_WAR_TARGETS_LABEL_NAME.lower()
-            ):
-                war_target_id = row.get("label_id")
-                break
-        else:
-            war_target_id = None
-
+        war_target_id = self._determine_war_target_id(labels_raw)
         if war_target_id:
             logger.debug("%s: Has war target label", self)
             self.has_war_targets_label = True
@@ -402,6 +404,18 @@ class SyncedCharacter(_SyncBaseModel):
         self.set_sync_status(self.Error.NONE)
         return True
 
+    def _determine_war_target_id(self, labels_raw: list) -> Optional[int]:
+        for row in labels_raw:
+            if (
+                row.get("label_name").lower()
+                == STANDINGSSYNC_WAR_TARGETS_LABEL_NAME.lower()
+            ):
+                war_target_id = row.get("label_id")
+                break
+        else:
+            war_target_id = None
+        return war_target_id
+
     @staticmethod
     def _esi_delete_contacts(character_id: int, token: Token, contact_ids: list):
         max_items = 20
@@ -483,72 +497,6 @@ class SyncedCharacter(_SyncBaseModel):
         return ["esi-characters.read_contacts.v1", "esi-characters.write_contacts.v1"]
 
 
-"""
-class AllianceContact(models.Model):
-
-    manager = models.ForeignKey(
-        SyncManager, on_delete=models.CASCADE, related_name="contacts"
-    )
-    contact_id = models.PositiveIntegerField(db_index=True)
-    contact_type = models.CharField(max_length=32)
-    standing = models.FloatField()
-
-    objects = AllianceContactManager()
-
-    def __str__(self):
-        return "{}:{}".format(self.contact_type, self.contact_id)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["manager", "contact_id"], name="manager-contacts-unq"
-            )
-        ]
-"""
-
-
-class EveEntity(models.Model):
-    """A character, corporation or alliance in Eve Online"""
-
-    class Category(models.TextChoices):
-        ALLIANCE = "AL", _("alliance")
-        CORPORATION = "CO", _("corporation")
-        CHARACTER = "CH", _("character")
-
-        @classmethod
-        def to_esi_type(cls, key) -> str:
-            my_map = {
-                cls.ALLIANCE: "alliance",
-                cls.CORPORATION: "corporation",
-                cls.CHARACTER: "character",
-            }
-            return my_map[key]
-
-        @classmethod
-        def from_esi_type(cls, key) -> str:
-            my_map = {
-                "alliance": cls.ALLIANCE,
-                "corporation": cls.CORPORATION,
-                "character": cls.CHARACTER,
-            }
-            return my_map[key]
-
-    id = models.PositiveIntegerField(primary_key=True)
-    category = models.CharField(max_length=2, choices=Category.choices, db_index=True)
-
-    objects = EveEntityManager()
-
-    def __str__(self) -> str:
-        return f"{self.id}-{self.Category.to_esi_type(self.category)}"
-
-    def to_esi_dict(self, standing: float) -> dict:
-        return {
-            "contact_id": self.id,
-            "contact_type": self.Category.to_esi_type(self.category),
-            "standing": standing,
-        }
-
-
 class EveContact(models.Model):
     """An Eve Online contact"""
 
@@ -556,7 +504,7 @@ class EveContact(models.Model):
         SyncManager, on_delete=models.CASCADE, related_name="contacts"
     )
     eve_entity = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="contacts"
+        EveEntity, on_delete=models.CASCADE, related_name="+"
     )
     standing = models.FloatField()
     is_war_target = models.BooleanField()
@@ -573,22 +521,15 @@ class EveContact(models.Model):
     def __str__(self):
         return f"{self.eve_entity}"
 
-    def to_esi_dict(self) -> dict:
-        return self.eve_entity.to_esi_dict(self.standing)
-
 
 class EveWar(models.Model):
     """An EveOnline war"""
 
     id = models.PositiveIntegerField(primary_key=True)
-    aggressor = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="aggressor_war"
-    )
-    allies = models.ManyToManyField(EveEntity, related_name="ally")
+    aggressor = models.ForeignKey(EveEntity, on_delete=models.CASCADE, related_name="+")
+    allies = models.ManyToManyField(EveEntity, related_name="+")
     declared = models.DateTimeField()
-    defender = models.ForeignKey(
-        EveEntity, on_delete=models.CASCADE, related_name="defender_war"
-    )
+    defender = models.ForeignKey(EveEntity, on_delete=models.CASCADE, related_name="+")
     finished = models.DateTimeField(null=True, default=None, db_index=True)
     is_mutual = models.BooleanField()
     is_open_for_allies = models.BooleanField()

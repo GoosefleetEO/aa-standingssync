@@ -7,25 +7,39 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
-## [1.4.1] - 2022-07-90
+## [1.5.0] - tbd
 
-## Added
+### Update notes
+
+This update will temporarily remove all contacts and wars. After you completed the installation, please manually trigger the update task to fetch contacts and wars again (or wait for it to run every from schedule):
+
+```bash
+celery -A myauth call standingssync.tasks.run_regular_sync
+```
+
+### Changed
+
+- Migrated proprietary EveEntity to EveUniverse's EveEntity to enable ID to Name resolution
+
+## [1.4.1] - 2022-07-29
+
+### Added
 
 - Show allies on EveWar admin site
 
-## Fixed
+### Fixed
 
 - Search on EveWar page does not work
 
 ## [1.4.0] - 2022-07-20
 
-## Added
+### Added
 
 - Show entities and wars on admin site
 
 ## [1.3.1] - 2022-06-18
 
-## Changed
+### Changed
 
 - Add wheel to PyPI deployment
 - Switch to local swagger spec file
@@ -33,26 +47,26 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.3.0] - 2022-03-02
 
-## Changed
+### Changed
 
 - Remove support for Python 3.6
 - Remove support for Django 3.1
 
-## Fixed
+### Fixed
 
 - SessionMiddleware() in tests requires additional parameter
 
-## Changed
+### Changed
 
 ## [1.2.2] - 2022-03-01
 
-## Changed
+### Changed
 
 - Remove deprecations that are being remove in Django 4
 
 ## [1.2.1] - 2021-10-28
 
-## Changed
+### Changed
 
 - Added CI tests for AA 2.9+ (Python 3.7+, Django 3.2), removed CI tests for AA < 2.9 (Python 3.6, Django 3.1)
 

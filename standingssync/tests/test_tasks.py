@@ -1,19 +1,20 @@
 from unittest.mock import patch
 
 from django.test import TestCase
+from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
-from allianceauth.tests.auth_utils import AuthUtils
-from app_utils.testing import NoSocketsTestCase, generate_invalid_pk
+from app_utils.esi_testing import BravadoOperationStub
+from app_utils.testing import (
+    NoSocketsTestCase,
+    create_user_from_evecharacter,
+    generate_invalid_pk,
+)
 
 from .. import tasks
-from ..models import EveContact, EveEntity, SyncedCharacter, SyncManager
-from . import (
-    ALLIANCE_CONTACTS,
-    BravadoOperationStub,
-    LoadTestDataMixin,
-    create_test_user,
-)
+from ..models import SyncedCharacter, SyncManager
+from . import ALLIANCE_CONTACTS, LoadTestDataMixin
+from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
 
 TASKS_PATH = "standingssync.tasks"
 MODELS_PATH = "standingssync.models"
@@ -26,18 +27,11 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
         # given
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
 
     def test_should_start_all_tasks(self, mock_update_all_wars, mock_run_manager_sync):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1,
-            character_ownership=self.main_ownership_1,
-            version_hash="new",
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1, version_hash="new")
         with patch(TASKS_PATH + ".is_esi_online", lambda: True):
             # when
             tasks.run_regular_sync()
@@ -64,10 +58,7 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # 1 user with 1 alt character
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
         alt_ownership_2 = CharacterOwnership.objects.create(
             character=cls.character_2, owner_hash="x2", user=cls.user_1
         )
@@ -76,24 +67,19 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         )
 
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # sync char
-        cls.synced_character_2 = SyncedCharacter.objects.create(
+        cls.synced_character_2 = SyncedCharacterFactory(
             character_ownership=alt_ownership_2, manager=cls.sync_manager
         )
-        cls.synced_character_3 = SyncedCharacter.objects.create(
+        cls.synced_character_3 = SyncedCharacterFactory(
             character_ownership=alt_ownership_3, manager=cls.sync_manager
         )
 
@@ -112,6 +98,14 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         self.assertTrue(result)
         self.assertTrue(mock_update.called)
 
+    @patch(TASKS_PATH + ".SyncedCharacter.update")
+    def test_should_raise_exception(self, mock_update):
+        # given
+        mock_update.side_effect = RuntimeError
+        # when
+        with self.assertRaises(RuntimeError):
+            tasks.run_character_sync(self.synced_character_2)
+
 
 @patch(TASKS_PATH + ".run_character_sync")
 class TestManagerSync(LoadTestDataMixin, TestCase):
@@ -121,18 +115,13 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
 
         # create environment
         # 1 user has permission for manager sync
-        cls.user_1 = create_test_user(cls.character_1)
-        cls.main_ownership_1 = CharacterOwnership.objects.get(
-            character=cls.character_1, user=cls.user_1
-        )
-        cls.user_1 = AuthUtils.add_permission_to_user_by_name(
-            "standingssync.add_syncmanager", cls.user_1
+        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+            cls.character_1.character_id, permissions=["standingssync.add_syncmanager"]
         )
 
         # user 1 has no permission for manager sync and has 1 alt
-        cls.user_2 = create_test_user(cls.character_2)
-        cls.main_ownership_2 = CharacterOwnership.objects.get(
-            character=cls.character_2, user=cls.user_2
+        cls.user_2, cls.main_ownership_2 = create_user_from_evecharacter(
+            cls.character_2.character_id
         )
         cls.alt_ownership_2 = CharacterOwnership.objects.create(
             character=cls.character_4, owner_hash="x4", user=cls.user_2
@@ -149,9 +138,7 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
     ):
         # given
         mock_update_from_esi.side_effect = RuntimeError
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1)
         # when
         result = tasks.run_manager_sync(sync_manager.pk)
         # then
@@ -165,10 +152,8 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
     ):
         # given
         mock_update_from_esi.return_value = "abc"
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        synced_character = SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        synced_character = SyncedCharacterFactory(
             character_ownership=self.alt_ownership_2, manager=sync_manager
         )
         # when

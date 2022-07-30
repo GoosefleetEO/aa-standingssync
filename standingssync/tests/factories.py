@@ -4,6 +4,7 @@ import factory
 import factory.fuzzy
 
 from django.utils.timezone import now
+from eveuniverse.models import EveEntity
 
 from app_utils.testdata_factories import (
     EveAllianceInfoFactory,
@@ -12,39 +13,43 @@ from app_utils.testdata_factories import (
     UserMainFactory,
 )
 
-from ..models import EveContact, EveEntity, EveWar, SyncedCharacter, SyncManager
+from ..models import EveContact, EveWar, SyncedCharacter, SyncManager
 
 
 class EveEntityFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = EveEntity
+        django_get_or_create = ("id", "name")
 
-    category = EveEntity.Category.CHARACTER
+    category = EveEntity.CATEGORY_CHARACTER
 
     @factory.lazy_attribute
     def id(self):
-        if self.category == EveEntity.Category.CHARACTER:
+        if self.category == EveEntity.CATEGORY_CHARACTER:
             obj = EveCharacterFactory()
             return obj.character_id
-        if self.category == EveEntity.Category.CORPORATION:
+        if self.category == EveEntity.CATEGORY_CORPORATION:
             obj = EveCorporationInfoFactory()
             return obj.corporation_id
-        if self.category == EveEntity.Category.ALLIANCE:
+        if self.category == EveEntity.CATEGORY_ALLIANCE:
             obj = EveAllianceInfoFactory()
             return obj.alliance_id
         raise NotImplementedError(f"Unknown category: {self.category}")
 
 
 class EveEntityCharacterFactory(EveEntityFactory):
-    category = EveEntity.Category.CHARACTER
+    name = factory.Faker("name")
+    category = EveEntity.CATEGORY_CHARACTER
 
 
 class EveEntityCorporationFactory(EveEntityFactory):
-    category = EveEntity.Category.CORPORATION
+    name = factory.Faker("company")
+    category = EveEntity.CATEGORY_CORPORATION
 
 
 class EveEntityAllianceFactory(EveEntityFactory):
-    category = EveEntity.Category.ALLIANCE
+    name = factory.Faker("company")
+    category = EveEntity.CATEGORY_ALLIANCE
 
 
 class EveWarFactory(factory.django.DjangoModelFactory):
@@ -71,9 +76,17 @@ class EveWarFactory(factory.django.DjangoModelFactory):
                 self.allies.add(ally)
 
 
-class ManagerUserMainFactory(UserMainFactory):
+class UserMainManagerFactory(UserMainFactory):
     main_character__scopes = ["esi-alliances.read_contacts.v1"]
     permissions__ = ["standingssync.add_syncmanager"]
+
+
+class UserMainSyncerFactory(UserMainFactory):
+    main_character__scopes = [
+        "esi-characters.read_contacts.v1",
+        "esi-characters.write_contacts.v1",
+    ]
+    permissions__ = ["standingssync.add_syncedcharacter"]
 
 
 class SyncManagerFactory(factory.django.DjangoModelFactory):
@@ -81,7 +94,7 @@ class SyncManagerFactory(factory.django.DjangoModelFactory):
         model = SyncManager
 
     class Params:
-        user = factory.SubFactory(ManagerUserMainFactory)
+        user = factory.SubFactory(UserMainManagerFactory)
 
     @factory.lazy_attribute
     def alliance(self):
@@ -98,12 +111,14 @@ class SyncedCharacterFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SyncedCharacter
 
+    class Params:
+        user = factory.SubFactory(UserMainSyncerFactory)
+
     manager = factory.SubFactory(SyncManagerFactory)
 
     @factory.lazy_attribute
     def character_ownership(self):
-        main = UserMainFactory()
-        return main.profile.main_character.character_ownership
+        return self.user.profile.main_character.character_ownership
 
 
 class EveContactFactory(factory.django.DjangoModelFactory):

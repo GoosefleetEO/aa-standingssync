@@ -1,43 +1,13 @@
 """Utility functions and classes for tests"""
 
-from django.contrib.auth.models import User
 
-from allianceauth.authentication.models import CharacterOwnership
+from eveuniverse.models import EveEntity
+
 from allianceauth.eveonline.models import (
     EveAllianceInfo,
     EveCharacter,
     EveCorporationInfo,
 )
-from allianceauth.tests.auth_utils import AuthUtils
-
-from ..models import EveEntity
-
-
-class BravadoOperationStub:
-    """Stub to simulate the operation object return from bravado via django-esi"""
-
-    class RequestConfig:
-        def __init__(self, also_return_response):
-            self.also_return_response = also_return_response
-
-    class ResponseStub:
-        def __init__(self, headers):
-            self.headers = headers
-
-    def __init__(self, data, headers: dict = None, also_return_response: bool = False):
-        self._data = data
-        self._headers = headers if headers else {"x-pages": 1}
-        self.request_config = BravadoOperationStub.RequestConfig(also_return_response)
-
-    def result(self, **kwargs):
-        if self.request_config.also_return_response:
-            return [self._data, self.ResponseStub(self._headers)]
-        else:
-            return self._data
-
-    def results(self, **kwargs):
-        return self.result(**kwargs)
-
 
 ALLIANCE_CONTACTS = [
     {"contact_id": 1002, "contact_type": "character", "standing": 10.0},
@@ -62,42 +32,20 @@ ALLIANCE_CONTACTS = [
 
 
 def load_eve_entities():
-    for obj in EveAllianceInfo.objects.all():
-        EveEntity.objects.create(
-            id=obj.alliance_id, category=EveEntity.Category.ALLIANCE
-        )
-    for obj in EveCorporationInfo.objects.all():
-        EveEntity.objects.create(
-            id=obj.corporation_id, category=EveEntity.Category.CORPORATION
-        )
-    for obj in EveCharacter.objects.all():
-        EveEntity.objects.create(
-            id=obj.character_id, category=EveEntity.Category.CHARACTER
-        )
+    auth_to_eve_entities()
     map_to_category = {
-        "alliance": EveEntity.Category.ALLIANCE,
-        "corporation": EveEntity.Category.CORPORATION,
-        "character": EveEntity.Category.CHARACTER,
+        "alliance": EveEntity.CATEGORY_ALLIANCE,
+        "corporation": EveEntity.CATEGORY_CORPORATION,
+        "character": EveEntity.CATEGORY_CHARACTER,
     }
     for info in ALLIANCE_CONTACTS:
         EveEntity.objects.get_or_create(
             id=info["contact_id"],
-            defaults={"category": map_to_category[info["contact_type"]]},
+            defaults={
+                "category": map_to_category[info["contact_type"]],
+                "name": f"dummy_{info['contact_id']}",
+            },
         )
-
-
-def add_main_to_user(user: User, character: EveCharacter):
-    CharacterOwnership.objects.create(
-        user=user, owner_hash="x1" + character.character_name, character=character
-    )
-    user.profile.main_character = character
-    user.profile.save()
-
-
-def create_test_user(character: EveCharacter) -> User:
-    user = AuthUtils.create_user(character.character_name)
-    add_main_to_user(user, character)
-    return user
 
 
 class LoadTestDataMixin:
@@ -177,3 +125,31 @@ class LoadTestDataMixin:
             corporation_name="Daily Bugle",
         )
         load_eve_entities()
+
+
+def auth_to_eve_entities():
+    """Creates EveEntity objects from existing Auth objects."""
+    for obj in EveAllianceInfo.objects.all():
+        EveEntity.objects.get_or_create(
+            id=obj.alliance_id,
+            defaults={
+                "name": obj.alliance_name,
+                "category": EveEntity.CATEGORY_ALLIANCE,
+            },
+        )
+    for obj in EveCorporationInfo.objects.all():
+        EveEntity.objects.get_or_create(
+            id=obj.corporation_id,
+            defaults={
+                "name": obj.corporation_name,
+                "category": EveEntity.CATEGORY_CORPORATION,
+            },
+        )
+    for obj in EveCharacter.objects.all():
+        EveEntity.objects.get_or_create(
+            id=obj.character_id,
+            defaults={
+                "name": obj.character_name,
+                "category": EveEntity.CATEGORY_CHARACTER,
+            },
+        )
