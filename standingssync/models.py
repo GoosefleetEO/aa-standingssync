@@ -277,6 +277,10 @@ class SyncedCharacter(_SyncBaseModel):
         if not token:
             return False
 
+        if not self.manager.contacts.exists():
+            logger.info("%s: No contacts to sync", self)
+            return True
+
         character_eff_standing = self.manager.get_effective_standing(
             self.character_ownership.character
         )

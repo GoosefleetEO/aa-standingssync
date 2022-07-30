@@ -76,9 +76,17 @@ class EveWarFactory(factory.django.DjangoModelFactory):
                 self.allies.add(ally)
 
 
-class ManagerUserMainFactory(UserMainFactory):
+class UserMainManagerFactory(UserMainFactory):
     main_character__scopes = ["esi-alliances.read_contacts.v1"]
     permissions__ = ["standingssync.add_syncmanager"]
+
+
+class UserMainSyncerFactory(UserMainFactory):
+    main_character__scopes = [
+        "esi-characters.read_contacts.v1",
+        "esi-characters.write_contacts.v1",
+    ]
+    permissions__ = ["standingssync.add_syncedcharacter"]
 
 
 class SyncManagerFactory(factory.django.DjangoModelFactory):
@@ -86,7 +94,7 @@ class SyncManagerFactory(factory.django.DjangoModelFactory):
         model = SyncManager
 
     class Params:
-        user = factory.SubFactory(ManagerUserMainFactory)
+        user = factory.SubFactory(UserMainManagerFactory)
 
     @factory.lazy_attribute
     def alliance(self):
@@ -103,12 +111,14 @@ class SyncedCharacterFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SyncedCharacter
 
+    class Params:
+        user = factory.SubFactory(UserMainSyncerFactory)
+
     manager = factory.SubFactory(SyncManagerFactory)
 
     @factory.lazy_attribute
     def character_ownership(self):
-        main = UserMainFactory()
-        return main.profile.main_character.character_ownership
+        return self.user.profile.main_character.character_ownership
 
 
 class EveContactFactory(factory.django.DjangoModelFactory):

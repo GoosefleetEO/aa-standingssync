@@ -18,9 +18,11 @@ from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 from ..models import EveContact, EveWar, SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import (
+    EveContactFactory,
     EveContactWarTargetFactory,
     EveEntityAllianceFactory,
     EveWarFactory,
+    SyncedCharacterFactory,
     SyncManagerFactory,
 )
 
@@ -33,25 +35,20 @@ class TestGetEffectiveStanding(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        # 1 user with 1 alt character
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
+        user, _ = create_user_from_evecharacter(
+            cls.character_1.character_id, permissions=["standingssync.add_syncmanager"]
         )
-
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1, character_ownership=cls.main_ownership_1
-        )
+        cls.sync_manager = SyncManagerFactory(user=user)
         contacts = [
             {"contact_id": 1001, "contact_type": "character", "standing": -10},
             {"contact_id": 2001, "contact_type": "corporation", "standing": 10},
             {"contact_id": 3001, "contact_type": "alliance", "standing": 5},
         ]
         for contact in contacts:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
     def test_char_with_character_standing(self):
@@ -129,34 +126,27 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        # create environment
         # 1 user has permission for manager sync
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+        cls.user_1, _ = create_user_from_evecharacter(
             cls.character_1.character_id, permissions=["standingssync.add_syncmanager"]
         )
 
         # user 1 has no permission for manager sync and has 1 alt
-        cls.user_2, cls.main_ownership_2 = create_user_from_evecharacter(
-            cls.character_2.character_id
-        )
+        cls.user_2, _ = create_user_from_evecharacter(cls.character_2.character_id)
         cls.alt_ownership = CharacterOwnership.objects.create(
             character=cls.character_4, owner_hash="x4", user=cls.user_2
         )
 
     def test_should_report_no_sync_error(self):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1)
         sync_manager.set_sync_status(SyncManager.Error.NONE)
         # when/then
         self.assertTrue(sync_manager.is_sync_ok)
 
     def test_should_report_sync_error(self):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1)
         for status in [
             SyncManager.Error.TOKEN_INVALID,
             SyncManager.Error.TOKEN_EXPIRED,
@@ -165,26 +155,28 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
             SyncManager.Error.ESI_UNAVAILABLE,
             SyncManager.Error.UNKNOWN,
         ]:
-            sync_manager.set_sync_status(status)
-            # when/then
-            self.assertFalse(sync_manager.is_sync_ok)
+            with self.subTest(status=status):
+                sync_manager.set_sync_status(status)
+                # when/then
+                self.assertFalse(sync_manager.is_sync_ok)
 
     def test_set_sync_status(self):
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        # given
+        sync_manager = SyncManagerFactory(user=self.user_1)
         sync_manager.last_error = SyncManager.Error.NONE
         sync_manager.last_sync = None
-
+        # when
         sync_manager.set_sync_status(SyncManager.Error.TOKEN_INVALID)
+        # then
         sync_manager.refresh_from_db()
-
         self.assertEqual(sync_manager.last_error, SyncManager.Error.TOKEN_INVALID)
         self.assertIsNotNone(sync_manager.last_sync)
 
     def test_should_abort_when_no_char(self):
         # given
-        sync_manager = SyncManager.objects.create(alliance=self.alliance_1)
+        sync_manager = SyncManagerFactory(
+            alliance=self.alliance_1, character_ownership=None
+        )
         # when
         result = sync_manager.update_from_esi()
         # then
@@ -194,9 +186,7 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
 
     def test_should_abort_when_insufficient_permission(self):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_2
-        )
+        sync_manager = SyncManagerFactory(user=self.user_2)
         # when
         result = sync_manager.update_from_esi()
         # then
@@ -212,9 +202,7 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
         mock_Token.objects.filter.return_value.require_scopes.return_value.require_valid.return_value.first.return_value = (
             None
         )
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1)
         # when
         result = sync_manager.update_from_esi()
         # then
@@ -226,10 +214,8 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
     def test_should_report_error_when_token_is_expired(self, mock_Token):
         # given
         mock_Token.objects.filter.side_effect = TokenExpiredError()
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        SyncedCharacterFactory(
             character_ownership=self.alt_ownership, manager=sync_manager
         )
         # when
@@ -243,10 +229,8 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
     def test_should_report_error_when_token_is_invalid(self, mock_Token):
         # given
         mock_Token.objects.filter.side_effect = TokenInvalidError()
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        SyncedCharacterFactory(
             character_ownership=self.alt_ownership, manager=sync_manager
         )
         # when
@@ -260,10 +244,8 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
     @patch(MODELS_PATH + ".esi")
     def test_should_sync_contacts(self, mock_esi, mock_Token):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        SyncedCharacterFactory(
             character_ownership=self.alt_ownership, manager=sync_manager
         )
         with patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", False):
@@ -278,10 +260,8 @@ class TestSyncManager(LoadTestDataMixin, NoSocketsTestCase):
     @patch(MODELS_PATH + ".esi")
     def test_should_sync_contacts_and_war_targets(self, mock_esi, mock_Token):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        SyncedCharacterFactory(
             character_ownership=self.alt_ownership, manager=sync_manager
         )
         EveWar.objects.create(
@@ -439,7 +419,7 @@ class TestSyncManager2(NoSocketsTestCase):
         self.assertSetEqual(fetch_war_targets(), set())
 
 
-class EsiContact:
+class EsiContactStub:
     class ContactType(Enum):
         CHARACTER = "character"
         CORPORATION = "corporation"
@@ -510,7 +490,7 @@ class EsiContact:
         }
 
 
-class EsiCharacterContacts:
+class EsiCharacterContactsStub:
     """Simulates the contacts for a character on ESI"""
 
     def __init__(self) -> None:
@@ -555,13 +535,13 @@ class EsiCharacterContacts:
     ):
         self._check_label_ids_valid(character_id, label_ids)
         contact_type_map = {
-            1: EsiContact.ContactType.CHARACTER,
-            2: EsiContact.ContactType.CORPORATION,
-            3: EsiContact.ContactType.ALLIANCE,
+            1: EsiContactStub.ContactType.CHARACTER,
+            2: EsiContactStub.ContactType.CORPORATION,
+            3: EsiContactStub.ContactType.ALLIANCE,
         }
         for contact_id in contact_ids:
             contact_type = contact_type_map[contact_id // 1000]
-            self._contacts[character_id][contact_id] = EsiContact(
+            self._contacts[character_id][contact_id] = EsiContactStub(
                 contact_id=contact_id,
                 contact_type=contact_type,
                 standing=standing,
@@ -599,9 +579,9 @@ class EsiCharacterContacts:
 @patch(MODELS_PATH + ".STANDINGSSYNC_WAR_TARGETS_LABEL_NAME", "WAR TARGETS")
 class TestSyncCharacter(LoadTestDataMixin, TestCase):
     CHARACTER_CONTACTS = [
-        EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=10.0),
-        EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
-        EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+        EsiContactStub(1014, EsiContactStub.ContactType.CHARACTER, standing=10.0),
+        EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
+        EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
     ]
 
     @classmethod
@@ -609,28 +589,20 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         super().setUpClass()
 
         # 1 user with 1 alt character
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
         cls.alt_ownership_2 = CharacterOwnership.objects.create(
             character=cls.character_2, owner_hash="x2", user=cls.user_1
         )
         cls.alt_ownership_3 = CharacterOwnership.objects.create(
             character=cls.character_3, owner_hash="x3", user=cls.user_1
         )
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         # sync manager with contacts
-        cls.sync_manager.contacts.all().delete()
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
         # set to contacts as war targets
         cls.sync_manager.contacts.filter(eve_entity_id__in=[1014, 3013]).update(
@@ -644,11 +616,11 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @staticmethod
     def eve_contact_2_esi_contact(eve_contact):
         map_category_2_type = {
-            EveEntity.CATEGORY_CHARACTER: EsiContact.ContactType.CHARACTER,
-            EveEntity.CATEGORY_CORPORATION: EsiContact.ContactType.CORPORATION,
-            EveEntity.CATEGORY_ALLIANCE: EsiContact.ContactType.ALLIANCE,
+            EveEntity.CATEGORY_CHARACTER: EsiContactStub.ContactType.CHARACTER,
+            EveEntity.CATEGORY_CORPORATION: EsiContactStub.ContactType.CORPORATION,
+            EveEntity.CATEGORY_ALLIANCE: EsiContactStub.ContactType.ALLIANCE,
         }
-        return EsiContact(
+        return EsiContactStub(
             contact_id=eve_contact.eve_entity_id,
             contact_type=map_category_2_type[eve_contact.eve_entity.category],
             standing=eve_contact.standing,
@@ -656,10 +628,10 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
 
     def setUp(self) -> None:
         self.maxDiff = None
-        self.synced_character_2 = SyncedCharacter.objects.create(
+        self.synced_character_2 = SyncedCharacterFactory(
             character_ownership=self.alt_ownership_2, manager=self.sync_manager
         )
-        self.synced_character_3 = SyncedCharacter.objects.create(
+        self.synced_character_3 = SyncedCharacterFactory(
             character_ownership=self.alt_ownership_3, manager=self.sync_manager
         )
 
@@ -724,7 +696,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         self.synced_character_2.version_hash = self.sync_manager.version_hash
         self.synced_character_2.save()
@@ -747,7 +719,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -772,7 +744,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_3.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -798,7 +770,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
@@ -809,28 +781,33 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContact(
-                1014, EsiContact.ContactType.CHARACTER, standing=-10.0, label_ids=[1]
+            EsiContactStub(
+                1014,
+                EsiContactStub.ContactType.CHARACTER,
+                standing=-10.0,
+                label_ids=[1],
             ),
-            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
-            EsiContact(
-                3013, EsiContact.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+            EsiContactStub(
+                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
             ),
-            EsiContact(1016, EsiContact.ContactType.CHARACTER, standing=10.0),
-            EsiContact(2013, EsiContact.ContactType.CORPORATION, standing=5.0),
-            EsiContact(2012, EsiContact.ContactType.CORPORATION, standing=-5.0),
-            EsiContact(1005, EsiContact.ContactType.CHARACTER, standing=-10.0),
-            EsiContact(1013, EsiContact.ContactType.CHARACTER, standing=-5.0),
-            EsiContact(1002, EsiContact.ContactType.CHARACTER, standing=10.0),
-            EsiContact(3014, EsiContact.ContactType.ALLIANCE, standing=5.0),
-            EsiContact(2015, EsiContact.ContactType.CORPORATION, standing=10.0),
-            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=-10.0),
-            EsiContact(2014, EsiContact.ContactType.CORPORATION, standing=0.0),
-            EsiContact(3015, EsiContact.ContactType.ALLIANCE, standing=10.0),
-            EsiContact(1012, EsiContact.ContactType.CHARACTER, standing=-10.0),
-            EsiContact(1015, EsiContact.ContactType.CHARACTER, standing=5.0),
-            EsiContact(1004, EsiContact.ContactType.CHARACTER, standing=10.0),
-            EsiContact(3012, EsiContact.ContactType.ALLIANCE, standing=-5.0),
+            EsiContactStub(1016, EsiContactStub.ContactType.CHARACTER, standing=10.0),
+            EsiContactStub(2013, EsiContactStub.ContactType.CORPORATION, standing=5.0),
+            EsiContactStub(2012, EsiContactStub.ContactType.CORPORATION, standing=-5.0),
+            EsiContactStub(1005, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
+            EsiContactStub(1013, EsiContactStub.ContactType.CHARACTER, standing=-5.0),
+            EsiContactStub(1002, EsiContactStub.ContactType.CHARACTER, standing=10.0),
+            EsiContactStub(3014, EsiContactStub.ContactType.ALLIANCE, standing=5.0),
+            EsiContactStub(2015, EsiContactStub.ContactType.CORPORATION, standing=10.0),
+            EsiContactStub(
+                2011, EsiContactStub.ContactType.CORPORATION, standing=-10.0
+            ),
+            EsiContactStub(2014, EsiContactStub.ContactType.CORPORATION, standing=0.0),
+            EsiContactStub(3015, EsiContactStub.ContactType.ALLIANCE, standing=10.0),
+            EsiContactStub(1012, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
+            EsiContactStub(1015, EsiContactStub.ContactType.CHARACTER, standing=5.0),
+            EsiContactStub(1004, EsiContactStub.ContactType.CHARACTER, standing=10.0),
+            EsiContactStub(3012, EsiContactStub.ContactType.ALLIANCE, standing=-5.0),
         }
         self.assertSetEqual(
             set(esi_character_contacts.contacts(character_id)), expected
@@ -846,7 +823,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -856,10 +833,10 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=-10.0),
-            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
-            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
-            EsiContact(3013, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+            EsiContactStub(1014, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
+            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
+            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+            EsiContactStub(3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
         }
         self.assertSetEqual(
             set(esi_character_contacts.contacts(character_id)),
@@ -876,7 +853,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
@@ -887,13 +864,16 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContact(
-                1014, EsiContact.ContactType.CHARACTER, standing=-10.0, label_ids=[1]
+            EsiContactStub(
+                1014,
+                EsiContactStub.ContactType.CHARACTER,
+                standing=-10.0,
+                label_ids=[1],
             ),
-            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
-            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
-            EsiContact(
-                3013, EsiContact.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
+            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+            EsiContactStub(
+                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
             ),
         }
         self.assertSetEqual(
@@ -911,20 +891,26 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(
             character_id,
             [
-                EsiContact(
+                EsiContactStub(
                     1011,
-                    EsiContact.ContactType.CHARACTER,
+                    EsiContactStub.ContactType.CHARACTER,
                     standing=-10.0,
                     label_ids=[1],
                 ),
-                EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=10.0),
-                EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
-                EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+                EsiContactStub(
+                    1014, EsiContactStub.ContactType.CHARACTER, standing=10.0
+                ),
+                EsiContactStub(
+                    2011, EsiContactStub.ContactType.CORPORATION, standing=5.0
+                ),
+                EsiContactStub(
+                    3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0
+                ),
             ],
         )
         # when
@@ -935,13 +921,16 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContact(
-                1014, EsiContact.ContactType.CHARACTER, standing=-10.0, label_ids=[1]
+            EsiContactStub(
+                1014,
+                EsiContactStub.ContactType.CHARACTER,
+                standing=-10.0,
+                label_ids=[1],
             ),
-            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
-            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
-            EsiContact(
-                3013, EsiContact.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
+            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+            EsiContactStub(
+                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
             ),
         }
         self.assertSetEqual(
@@ -959,7 +948,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
@@ -982,7 +971,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         character_id = (
             self.synced_character_2.character_ownership.character.character_id
         )
-        esi_character_contacts = EsiCharacterContacts()
+        esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -1111,35 +1100,39 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         )
 
 
+class TestSyncCharacter2(NoSocketsTestCase):
+    def test_should_not_sync_when_no_contacts(self):
+        # given
+        manager = SyncManagerFactory(version_hash="abc")
+        character = SyncedCharacterFactory(manager=manager)
+        # when
+        result = character.update()
+        # then
+        self.assertTrue(result)
+
+
 class TestEveContactManager(LoadTestDataMixin, NoSocketsTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
         # 1 user with 1 alt character
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
         cls.alt_ownership = CharacterOwnership.objects.create(
             character=cls.character_2, owner_hash="x2", user=cls.user_1
         )
 
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # sync char
-        cls.synced_character = SyncedCharacter.objects.create(
+        cls.synced_character = SyncedCharacterFactory(
             character_ownership=cls.alt_ownership, manager=cls.sync_manager
         )
 
@@ -1248,16 +1241,14 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
         # given
         cls.war_declared = now() - dt.timedelta(days=3)
         cls.war_started = now() - dt.timedelta(days=2)
-        war = EveWar.objects.create(
+        EveWarFactory(
             id=8,
             aggressor=EveEntity.objects.get(id=3011),
             defender=EveEntity.objects.get(id=3001),
             declared=cls.war_declared,
             started=cls.war_started,
-            is_mutual=False,
-            is_open_for_allies=False,
+            allies=[EveEntity.objects.get(id=3012)],
         )
-        war.allies.add(EveEntity.objects.get(id=3012))
         EveEntityAllianceFactory(id=3002)
         EveEntityAllianceFactory(id=3003)
 
