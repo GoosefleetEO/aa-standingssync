@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.5.0] - tbd
 
+### Update notes
+
+This update will temporarily remove all contacts and wars. After you completed the installation, please manually trigger the update task to fetch contacts and wars again (or wait for it to run every from schedule):
+
+```bash
+celery -A myauth call standingssync.tasks.run_regular_sync
+```
+
 ### Changed
 
 - Migrated proprietary EveEntity to EveUniverse's EveEntity to enable ID to Name resolution
