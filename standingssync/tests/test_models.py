@@ -24,6 +24,7 @@ from .factories import (
     EveWarFactory,
     SyncedCharacterFactory,
     SyncManagerFactory,
+    UserMainSyncerFactory,
 )
 
 MODELS_PATH = "standingssync.models"
@@ -417,6 +418,18 @@ class TestSyncManager2(NoSocketsTestCase):
         self.assertTrue(result)
         sync_manager.refresh_from_db()
         self.assertSetEqual(fetch_war_targets(), set())
+
+    def test_do_nothing_when_contacts_are_unchanged(self, mock_esi):
+        # given
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub([])
+        )
+        my_version_hash = SyncManager._calculate_version_hash({})
+        sync_manager = SyncManagerFactory(version_hash=my_version_hash)
+        # when
+        result = sync_manager.update_from_esi()
+        # then
+        self.assertTrue(result)
 
 
 class EsiContactStub:
@@ -854,7 +867,9 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
             self.synced_character_2.character_ownership.character.character_id
         )
         esi_character_contacts = EsiCharacterContactsStub()
-        esi_character_contacts.setup_labels(character_id, {1: "war targets"})
+        esi_character_contacts.setup_labels(
+            character_id, {2: "other", 1: "war targets"}
+        )
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -1109,6 +1124,16 @@ class TestSyncCharacter2(NoSocketsTestCase):
         result = character.update()
         # then
         self.assertTrue(result)
+
+    def test_should_abort_sync_when_insufficient_permissions(self):
+        # given
+        manager = SyncManagerFactory(version_hash="abc")
+        user = UserMainSyncerFactory(permissions__=[])
+        character = SyncedCharacterFactory(manager=manager, user=user)
+        # when
+        result = character.update()
+        # then
+        self.assertFalse(result)
 
 
 class TestEveContactManager(LoadTestDataMixin, NoSocketsTestCase):

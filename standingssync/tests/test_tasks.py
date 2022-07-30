@@ -98,6 +98,14 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         self.assertTrue(result)
         self.assertTrue(mock_update.called)
 
+    @patch(TASKS_PATH + ".SyncedCharacter.update")
+    def test_should_raise_exception(self, mock_update):
+        # given
+        mock_update.side_effect = RuntimeError
+        # when
+        with self.assertRaises(RuntimeError):
+            tasks.run_character_sync(self.synced_character_2)
+
 
 @patch(TASKS_PATH + ".run_character_sync")
 class TestManagerSync(LoadTestDataMixin, TestCase):

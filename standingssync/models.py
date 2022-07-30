@@ -169,7 +169,7 @@ class SyncManager(_SyncBaseModel):
             war_target_ids = set()
 
         # determine if contacts have changed by comparing their hashes
-        new_version_hash = hashlib.md5(json.dumps(contacts).encode("utf-8")).hexdigest()
+        new_version_hash = self._calculate_version_hash(contacts)
         if force_sync or new_version_hash != self.version_hash:
             logger.info(
                 "%s: Storing alliance update with %d contacts", self, len(contacts)
@@ -207,6 +207,11 @@ class SyncManager(_SyncBaseModel):
             "contact_type": eve_entity.category,
             "standing": standing,
         }
+
+    @staticmethod
+    def _calculate_version_hash(contacts: dict) -> str:
+        """Calculate hash for contacts."""
+        return hashlib.md5(json.dumps(contacts).encode("utf-8")).hexdigest()
 
     @classmethod
     def get_esi_scopes(cls) -> list:
@@ -311,16 +316,7 @@ class SyncedCharacter(_SyncBaseModel):
         labels_raw = esi.client.Contacts.get_characters_character_id_contacts_labels(
             character_id=character_id, token=token.valid_access_token()
         ).results()
-        for row in labels_raw:
-            if (
-                row.get("label_name").lower()
-                == STANDINGSSYNC_WAR_TARGETS_LABEL_NAME.lower()
-            ):
-                war_target_id = row.get("label_id")
-                break
-        else:
-            war_target_id = None
-
+        war_target_id = self._determine_war_target_id(labels_raw)
         if war_target_id:
             logger.debug("%s: Has war target label", self)
             self.has_war_targets_label = True
@@ -407,6 +403,18 @@ class SyncedCharacter(_SyncBaseModel):
         self.save()
         self.set_sync_status(self.Error.NONE)
         return True
+
+    def _determine_war_target_id(self, labels_raw: list) -> Optional[int]:
+        for row in labels_raw:
+            if (
+                row.get("label_name").lower()
+                == STANDINGSSYNC_WAR_TARGETS_LABEL_NAME.lower()
+            ):
+                war_target_id = row.get("label_id")
+                break
+        else:
+            war_target_id = None
+        return war_target_id
 
     @staticmethod
     def _esi_delete_contacts(character_id: int, token: Token, contact_ids: list):
