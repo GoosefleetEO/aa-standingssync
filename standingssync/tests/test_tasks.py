@@ -12,8 +12,9 @@ from app_utils.testing import (
 )
 
 from .. import tasks
-from ..models import EveContact, SyncedCharacter, SyncManager
+from ..models import SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
+from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
 
 TASKS_PATH = "standingssync.tasks"
 MODELS_PATH = "standingssync.models"
@@ -26,17 +27,11 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
         # given
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
 
     def test_should_start_all_tasks(self, mock_update_all_wars, mock_run_manager_sync):
         # given
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1,
-            character_ownership=self.main_ownership_1,
-            version_hash="new",
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1, version_hash="new")
         with patch(TASKS_PATH + ".is_esi_online", lambda: True):
             # when
             tasks.run_regular_sync()
@@ -63,9 +58,7 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # 1 user with 1 alt character
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
         alt_ownership_2 = CharacterOwnership.objects.create(
             character=cls.character_2, owner_hash="x2", user=cls.user_1
         )
@@ -74,24 +67,19 @@ class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
         )
 
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # sync char
-        cls.synced_character_2 = SyncedCharacter.objects.create(
+        cls.synced_character_2 = SyncedCharacterFactory(
             character_ownership=alt_ownership_2, manager=cls.sync_manager
         )
-        cls.synced_character_3 = SyncedCharacter.objects.create(
+        cls.synced_character_3 = SyncedCharacterFactory(
             character_ownership=alt_ownership_3, manager=cls.sync_manager
         )
 
@@ -142,9 +130,7 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
     ):
         # given
         mock_update_from_esi.side_effect = RuntimeError
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
+        sync_manager = SyncManagerFactory(user=self.user_1)
         # when
         result = tasks.run_manager_sync(sync_manager.pk)
         # then
@@ -158,10 +144,8 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
     ):
         # given
         mock_update_from_esi.return_value = "abc"
-        sync_manager = SyncManager.objects.create(
-            alliance=self.alliance_1, character_ownership=self.main_ownership_1
-        )
-        synced_character = SyncedCharacter.objects.create(
+        sync_manager = SyncManagerFactory(user=self.user_1)
+        synced_character = SyncedCharacterFactory(
             character_ownership=self.alt_ownership_2, manager=sync_manager
         )
         # when

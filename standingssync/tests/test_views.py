@@ -11,8 +11,9 @@ from allianceauth.eveonline.models import EveCharacter
 from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
 from .. import views
-from ..models import EveContact, EveEntity, SyncedCharacter, SyncManager
+from ..models import EveEntity, SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
+from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
 
 MODULE_PATH = "standingssync.views"
 
@@ -23,21 +24,14 @@ class TestMainScreen(LoadTestDataMixin, TestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
-            cls.character_1.character_id
-        )
+        cls.user_1, _ = create_user_from_evecharacter(cls.character_1.character_id)
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # user 2 is a normal user and has two alts and permission
@@ -49,7 +43,7 @@ class TestMainScreen(LoadTestDataMixin, TestCase):
             character=cls.character_4, owner_hash="x4", user=cls.user_2
         )
         cls.user_2 = User.objects.get(pk=cls.user_2.pk)
-        cls.sync_char = SyncedCharacter.objects.create(
+        cls.sync_char = SyncedCharacterFactory(
             manager=cls.sync_manager, character_ownership=cls.alt_ownership_1
         )
 
@@ -95,21 +89,16 @@ class TestAddSyncChar(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+        cls.user_1, _ = create_user_from_evecharacter(
             cls.character_1.character_id, permissions=["standingssync.add_syncmanager"]
         )
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # user 2 is a normal user and has three alts
@@ -234,7 +223,7 @@ class TestAddAllianceManager(LoadTestDataMixin, NoSocketsTestCase):
         super().setUpClass()
 
         # user 1 is the manager
-        cls.user_1, cls.main_ownership_1 = create_user_from_evecharacter(
+        cls.user_1, _ = create_user_from_evecharacter(
             cls.character_1.character_id,
             permissions=[
                 "standingssync.add_syncmanager",
@@ -242,17 +231,12 @@ class TestAddAllianceManager(LoadTestDataMixin, NoSocketsTestCase):
             ],
         )
         # sync manager with contacts
-        cls.sync_manager = SyncManager.objects.create(
-            alliance=cls.alliance_1,
-            character_ownership=cls.main_ownership_1,
-            version_hash="new",
-        )
+        cls.sync_manager = SyncManagerFactory(user=cls.user_1, version_hash="new")
         for contact in ALLIANCE_CONTACTS:
-            EveContact.objects.create(
+            EveContactFactory(
                 manager=cls.sync_manager,
                 eve_entity=EveEntity.objects.get(id=contact["contact_id"]),
                 standing=contact["standing"],
-                is_war_target=False,
             )
 
         # user 2 is a normal user and has two alts
