@@ -1,6 +1,6 @@
 from typing import List
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Exists, OuterRef
 from django.utils.timezone import now
 
@@ -83,45 +83,33 @@ class EveWarManagerBase(models.Manager):
         if finished and finished <= now():
             logger.info("Ignoring finished war with ID %s", id)
             return
-
-        logger.info("Updating war details for ID %s", id)
-        try:
-            war = self.get(id=id)
-        except self.model.DoesNotExist:
-            aggressor, _ = EveEntity.objects.get_or_create(
-                id=self._extract_id_from_war_participant(war_info.get("aggressor"))
-            )
-            defender, _ = EveEntity.objects.get_or_create(
-                id=self._extract_id_from_war_participant(war_info.get("defender"))
-            )
-            war = self.create(
+        aggressor, _ = EveEntity.objects.get_or_create(
+            id=self._extract_id_from_war_participant(war_info["aggressor"])
+        )
+        defender, _ = EveEntity.objects.get_or_create(
+            id=self._extract_id_from_war_participant(war_info["defender"])
+        )
+        with transaction.atomic():
+            war, _ = self.update_or_create(
                 id=id,
-                aggressor=aggressor,
-                declared=war_info.get("declared"),
-                defender=defender,
-                is_mutual=war_info.get("mutual"),
-                is_open_for_allies=war_info.get("open_for_allies"),
-                retracted=war_info.get("retracted"),
-                started=war_info.get("started"),
-                finished=war_info.get("finished"),
-            )
-
-        else:
-            self.update(
-                retracted=war_info.get("retracted"),
-                started=war_info.get("started"),
-                finished=war_info.get("finished"),
-                is_mutual=war_info.get("mutual"),
-                is_open_for_allies=war_info.get("open_for_allies"),
+                defaults={
+                    "aggressor": aggressor,
+                    "declared": war_info["declared"],
+                    "defender": defender,
+                    "is_mutual": war_info["mutual"],
+                    "is_open_for_allies": war_info["open_for_allies"],
+                    "retracted": war_info.get("retracted"),
+                    "started": war_info.get("started"),
+                    "finished": war_info.get("finished"),
+                },
             )
             war.allies.clear()
-
-        if war_info.get("allies"):
-            for ally_info in war_info.get("allies"):
-                eve_entity, _ = EveEntity.objects.get_or_create(
-                    id=self._extract_id_from_war_participant(ally_info)
-                )
-                war.allies.add(eve_entity)
+            if war_info.get("allies"):
+                for ally_info in war_info.get("allies"):
+                    eve_entity, _ = EveEntity.objects.get_or_create(
+                        id=self._extract_id_from_war_participant(ally_info)
+                    )
+                    war.allies.add(eve_entity)
 
     @staticmethod
     def _extract_id_from_war_participant(participant: dict) -> int:

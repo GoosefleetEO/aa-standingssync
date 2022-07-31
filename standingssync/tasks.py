@@ -85,8 +85,10 @@ def run_character_sync(sync_char_pk: int, force_sync: bool = False) -> bool:
 
 @shared_task
 def update_all_wars():
-    logger.info("Removing finished wars")
-    EveWar.objects.finished_wars().delete()
+    finished_wars = EveWar.objects.finished_wars()
+    finished_wars_count = finished_wars.count()
+    finished_wars.delete()
+    logger.info("Removed %s finished wars", finished_wars_count)
     logger.info("Retrieving wars from ESI")
     war_ids = esi.client.Wars.get_wars().results()
     logger.info("Retrieved %s wars from ESI", len(war_ids))
