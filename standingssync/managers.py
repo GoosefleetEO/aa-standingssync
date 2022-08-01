@@ -1,6 +1,6 @@
-from typing import List
+from typing import Iterable, List, Set
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Exists, OuterRef
 from django.utils.timezone import now
 
@@ -15,20 +15,20 @@ logger = LoggerAddTag(get_extension_logger(__name__), __title__)
 
 class EveContactQuerySet(models.QuerySet):
     def grouped_by_standing(self) -> dict:
-        """returns alliance contacts grouped by their standing as dict"""
-
+        """Return alliance contacts grouped by their standing as dict."""
         contacts_by_standing = dict()
         for contact in self.all():
             if contact.standing not in contacts_by_standing:
                 contacts_by_standing[contact.standing] = set()
             contacts_by_standing[contact.standing].add(contact)
-
         return contacts_by_standing
 
 
-class EveContactManager(models.Manager):
-    def get_queryset(self) -> models.QuerySet:
-        return EveContactQuerySet(self.model, using=self._db)
+class EveContactManagerBase(models.Manager):
+    pass
+
+
+EveContactManager = EveContactManagerBase.from_queryset(EveContactQuerySet)
 
 
 class EveWarQuerySet(models.QuerySet):
@@ -50,8 +50,8 @@ class EveWarQuerySet(models.QuerySet):
 
 class EveWarManagerBase(models.Manager):
     def war_targets(self, alliance_id: int) -> List[models.Model]:
-        """returns list of current war targets for given alliance as EveEntity objects
-        or an empty list if there are none
+        """Return list of current war targets for given alliance as EveEntity objects
+        or an empty list if there are None.
         """
         war_targets = list()
         active_wars = self.active_wars()
@@ -74,54 +74,39 @@ class EveWarManagerBase(models.Manager):
 
         return war_targets
 
-    def update_from_esi(self, id: int):
+    def update_or_create_from_esi(self, id: int):
+        """Updates existing or creates new objects from ESI with given ID."""
         from .models import EveEntity
 
         logger.info("Retrieving war details for ID %s", id)
-        war_info = esi.client.Wars.get_wars_war_id(war_id=id).results()
-        finished = war_info.get("finished")
-        if finished and finished <= now():
-            logger.info("Ignoring finished war with ID %s", id)
-            return
-
-        logger.info("Updating war details for ID %s", id)
-        try:
-            war = self.get(id=id)
-        except self.model.DoesNotExist:
-            aggressor, _ = EveEntity.objects.get_or_create(
-                id=self._extract_id_from_war_participant(war_info.get("aggressor"))
-            )
-            defender, _ = EveEntity.objects.get_or_create(
-                id=self._extract_id_from_war_participant(war_info.get("defender"))
-            )
-            war = self.create(
+        war_info = esi.client.Wars.get_wars_war_id(war_id=id).results(ignore_cache=True)
+        aggressor, _ = EveEntity.objects.get_or_create(
+            id=self._extract_id_from_war_participant(war_info["aggressor"])
+        )
+        defender, _ = EveEntity.objects.get_or_create(
+            id=self._extract_id_from_war_participant(war_info["defender"])
+        )
+        with transaction.atomic():
+            war, _ = self.update_or_create(
                 id=id,
-                aggressor=aggressor,
-                declared=war_info.get("declared"),
-                defender=defender,
-                is_mutual=war_info.get("mutual"),
-                is_open_for_allies=war_info.get("open_for_allies"),
-                retracted=war_info.get("retracted"),
-                started=war_info.get("started"),
-                finished=war_info.get("finished"),
-            )
-
-        else:
-            self.update(
-                retracted=war_info.get("retracted"),
-                started=war_info.get("started"),
-                finished=war_info.get("finished"),
-                is_mutual=war_info.get("mutual"),
-                is_open_for_allies=war_info.get("open_for_allies"),
+                defaults={
+                    "aggressor": aggressor,
+                    "declared": war_info["declared"],
+                    "defender": defender,
+                    "is_mutual": war_info["mutual"],
+                    "is_open_for_allies": war_info["open_for_allies"],
+                    "retracted": war_info.get("retracted"),
+                    "started": war_info.get("started"),
+                    "finished": war_info.get("finished"),
+                },
             )
             war.allies.clear()
-
-        if war_info.get("allies"):
-            for ally_info in war_info.get("allies"):
-                eve_entity, _ = EveEntity.objects.get_or_create(
-                    id=self._extract_id_from_war_participant(ally_info)
-                )
-                war.allies.add(eve_entity)
+            if war_info.get("allies"):
+                for ally_info in war_info.get("allies"):
+                    eve_entity, _ = EveEntity.objects.get_or_create(
+                        id=self._extract_id_from_war_participant(ally_info)
+                    )
+                    war.allies.add(eve_entity)
 
     @staticmethod
     def _extract_id_from_war_participant(participant: dict) -> int:
@@ -130,6 +115,12 @@ class EveWarManagerBase(models.Manager):
         if not alliance_id and not corporation_id:
             raise ValueError(f"Invalid participant: {participant}")
         return alliance_id or corporation_id
+
+    def unfinished_war_ids(self, war_ids: Iterable[int]) -> Set[int]:
+        """Determine IDs from unfinished and new wars."""
+        finished_war_ids = set(self.finished_wars().values_list("id", flat=True))
+        war_ids = set(war_ids)
+        return war_ids.difference(finished_war_ids)
 
 
 EveWarManager = EveWarManagerBase.from_queryset(EveWarQuerySet)

@@ -17,3 +17,8 @@ STANDINGSSYNC_WAR_TARGETS_LABEL_NAME = clean_setting(
 
 # When enabled will replace contacts of synced characters with alliance contacts
 STANDINGSSYNC_REPLACE_CONTACTS = clean_setting("STANDINGSSYNC_REPLACE_CONTACTS", True)
+
+# Smallest war ID to fetch from ESI. All wars with smaller IDs are known to be already finished. This is an optimization to avoid having to fetch >700K wars from ESI.
+STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID = clean_setting(
+    "STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 693125
+)

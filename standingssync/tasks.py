@@ -2,13 +2,13 @@ from celery import shared_task
 
 from eveuniverse.core.esitools import is_esi_online
 from eveuniverse.models import EveEntity
+from eveuniverse.tasks import update_unresolved_eve_entities
 
 from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
 from . import __title__
 from .models import EveWar, SyncedCharacter, SyncManager
-from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
 
@@ -85,16 +85,15 @@ def run_character_sync(sync_char_pk: int, force_sync: bool = False) -> bool:
 
 @shared_task
 def update_all_wars():
-    logger.info("Removing finished wars")
-    EveWar.objects.finished_wars().delete()
-    logger.info("Retrieving wars from ESI")
-    war_ids = esi.client.Wars.get_wars().results()
-    logger.info("Retrieved %s wars from ESI", len(war_ids))
-    for war_id in war_ids:
+    logger.info("Fetching wars from ESI")
+    war_ids = EveWar.fetch_war_ids_from_esi()
+    unfinished_war_ids = EveWar.objects.unfinished_war_ids(war_ids)
+    logger.info("Fetching details for %s wars from ESI", len(unfinished_war_ids))
+    for war_id in unfinished_war_ids:
         update_war.delay(war_id)
+    update_unresolved_eve_entities.delay()
 
 
 @shared_task
 def update_war(war_id: int):
-    EveWar.objects.update_from_esi(war_id)
-    EveEntity.objects.bulk_update_new_esi()
+    EveWar.objects.update_or_create_from_esi(war_id)

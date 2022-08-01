@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Update notes
 
-This update will temporarily remove all contacts and wars. After you completed the installation, please manually trigger the update task to fetch contacts and wars again (or wait for it to run every from schedule):
+This update will temporarily remove all contacts and wars. After you completed the installation, please manually trigger the update task to fetch contacts and wars again (or wait for it to run from schedule):
 
 ```bash
 celery -A myauth call standingssync.tasks.run_regular_sync
@@ -20,6 +20,10 @@ celery -A myauth call standingssync.tasks.run_regular_sync
 ### Changed
 
 - Migrated proprietary EveEntity to EveUniverse's EveEntity to enable ID to Name resolution
+
+### Fixed
+
+- Fix: Not all active wars are shown in the app
 
 ## [1.4.1] - 2022-07-29
 

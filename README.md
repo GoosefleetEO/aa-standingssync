@@ -135,6 +135,7 @@ Name | Description | Default
 -- | -- | --
 `STANDINGSSYNC_ADD_WAR_TARGETS`| When enabled will automatically add current war targets with -10 standing to synced characters | `False`
 `STANDINGSSYNC_CHAR_MIN_STANDING`| minimum standing a character needs to have with the alliance to be able to sync.<br>Set to `0.0` if you want to allow neutral alts to sync. | `0.1`<br>*character has to have some blue standing, neutrals will be rejected*
+`STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID`| Smallest war ID to fetch from ESI. All wars with smaller IDs are known to be already finished. This is an optimization to avoid having to fetch >700K wars from ESI. | `693125`
 `STANDINGSSYNC_REPLACE_CONTACTS`| When enabled will replace contacts of synced characters with alliance contacts | `True`
 `STANDINGSSYNC_WAR_TARGETS_LABEL_NAME`| Name of the contact label for war targets. Needs to be created by the user for each synced character. Required to ensure that war targets are deleted once they become invalid. Not case sensitive. | `war_targets`
 
