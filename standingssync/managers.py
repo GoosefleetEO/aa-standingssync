@@ -15,20 +15,20 @@ logger = LoggerAddTag(get_extension_logger(__name__), __title__)
 
 class EveContactQuerySet(models.QuerySet):
     def grouped_by_standing(self) -> dict:
-        """returns alliance contacts grouped by their standing as dict"""
-
+        """Return alliance contacts grouped by their standing as dict."""
         contacts_by_standing = dict()
         for contact in self.all():
             if contact.standing not in contacts_by_standing:
                 contacts_by_standing[contact.standing] = set()
             contacts_by_standing[contact.standing].add(contact)
-
         return contacts_by_standing
 
 
-class EveContactManager(models.Manager):
-    def get_queryset(self) -> models.QuerySet:
-        return EveContactQuerySet(self.model, using=self._db)
+class EveContactManagerBase(models.Manager):
+    pass
+
+
+EveContactManager = EveContactManagerBase.from_queryset(EveContactQuerySet)
 
 
 class EveWarQuerySet(models.QuerySet):
@@ -50,8 +50,8 @@ class EveWarQuerySet(models.QuerySet):
 
 class EveWarManagerBase(models.Manager):
     def war_targets(self, alliance_id: int) -> List[models.Model]:
-        """returns list of current war targets for given alliance as EveEntity objects
-        or an empty list if there are none
+        """Return list of current war targets for given alliance as EveEntity objects
+        or an empty list if there are None.
         """
         war_targets = list()
         active_wars = self.active_wars()
@@ -74,7 +74,8 @@ class EveWarManagerBase(models.Manager):
 
         return war_targets
 
-    def update_from_esi(self, id: int):
+    def update_or_create_from_esi(self, id: int):
+        """Updates existing or creates new objects from ESI with given ID."""
         from .models import EveEntity
 
         logger.info("Retrieving war details for ID %s", id)

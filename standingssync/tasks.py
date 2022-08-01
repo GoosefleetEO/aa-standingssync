@@ -2,6 +2,7 @@ from celery import shared_task
 
 from eveuniverse.core.esitools import is_esi_online
 from eveuniverse.models import EveEntity
+from eveuniverse.tasks import update_unresolved_eve_entities
 
 from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
@@ -90,9 +91,9 @@ def update_all_wars():
     logger.info("Fetching details for %s wars from ESI", len(unfinished_war_ids))
     for war_id in unfinished_war_ids:
         update_war.delay(war_id)
+    update_unresolved_eve_entities.delay()
 
 
 @shared_task
 def update_war(war_id: int):
-    EveWar.objects.update_from_esi(war_id)
-    # EveEntity.objects.bulk_update_new_esi()
+    EveWar.objects.update_or_create_from_esi(war_id)

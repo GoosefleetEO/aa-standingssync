@@ -160,7 +160,7 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
             esi_data
         )
         # when
-        EveWar.objects.update_from_esi(id=1)
+        EveWar.objects.update_or_create_from_esi(id=1)
         # then
         self.assertTrue(EveWar.objects.filter(id=1).exists())
         war = EveWar.objects.get(id=1)
@@ -203,7 +203,7 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
             esi_data
         )
         # when
-        EveWar.objects.update_from_esi(id=1)
+        EveWar.objects.update_or_create_from_esi(id=1)
         # then
         self.assertTrue(EveWar.objects.filter(id=1).exists())
         war = EveWar.objects.get(id=1)
@@ -247,7 +247,7 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
     #         esi_data
     #     )
     #     # when
-    #     EveWar.objects.update_from_esi(id=1)
+    #     EveWar.objects.update_or_create_from_esi(id=1)
     #     # then
     #     self.assertFalse(EveWar.objects.filter(id=1).exists())
 
@@ -280,7 +280,7 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
             esi_data
         )
         # when
-        EveWar.objects.update_from_esi(id=8)
+        EveWar.objects.update_or_create_from_esi(id=8)
         # then
         self.assertTrue(EveWar.objects.filter(id=8).exists())
         war = EveWar.objects.get(id=8)

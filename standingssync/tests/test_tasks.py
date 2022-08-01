@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
@@ -167,6 +167,7 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
         self.assertFalse(kwargs["force_sync"])
 
 
+@override_settings(CELERY_ALWAYS_EAGER=True, CELERY_EAGER_PROPAGATES_EXCEPTIONS=True)
 class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
     @classmethod
     def setUpClass(cls):
@@ -184,7 +185,7 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
         result = {row[0][0] for row in mock_update_war.delay.call_args_list}
         self.assertSetEqual(result, {1, 2, 3})
 
-    @patch(TASKS_PATH + ".EveWar.objects.update_from_esi")
+    @patch(TASKS_PATH + ".EveWar.objects.update_or_create_from_esi")
     def test_should_update_war(self, mock_update_from_esi):
         # when
         tasks.update_war(42)
