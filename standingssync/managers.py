@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable, List, Set
 
 from django.db import models, transaction
 from django.db.models import Exists, OuterRef
@@ -78,11 +78,7 @@ class EveWarManagerBase(models.Manager):
         from .models import EveEntity
 
         logger.info("Retrieving war details for ID %s", id)
-        war_info = esi.client.Wars.get_wars_war_id(war_id=id).results()
-        finished = war_info.get("finished")
-        if finished and finished <= now():
-            logger.info("Ignoring finished war with ID %s", id)
-            return
+        war_info = esi.client.Wars.get_wars_war_id(war_id=id).results(ignore_cache=True)
         aggressor, _ = EveEntity.objects.get_or_create(
             id=self._extract_id_from_war_participant(war_info["aggressor"])
         )
@@ -118,6 +114,12 @@ class EveWarManagerBase(models.Manager):
         if not alliance_id and not corporation_id:
             raise ValueError(f"Invalid participant: {participant}")
         return alliance_id or corporation_id
+
+    def unfinished_war_ids(self, war_ids: Iterable[int]) -> Set[int]:
+        """Determine IDs from unfinished and new wars."""
+        finished_war_ids = set(self.finished_wars().values_list("id", flat=True))
+        war_ids = set(war_ids)
+        return war_ids.difference(finished_war_ids)
 
 
 EveWarManager = EveWarManagerBase.from_queryset(EveWarQuerySet)

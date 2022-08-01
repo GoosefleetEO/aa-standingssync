@@ -1,6 +1,6 @@
 import hashlib
 import json
-from typing import Optional
+from typing import Optional, Set
 
 from django.db import models, transaction
 from django.utils.timezone import now
@@ -19,6 +19,7 @@ from . import __title__
 from .app_settings import (
     STANDINGSSYNC_ADD_WAR_TARGETS,
     STANDINGSSYNC_CHAR_MIN_STANDING,
+    STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID,
     STANDINGSSYNC_REPLACE_CONTACTS,
     STANDINGSSYNC_WAR_TARGETS_LABEL_NAME,
 )
@@ -539,4 +540,32 @@ class EveWar(models.Model):
     objects = EveWarManager()
 
     def __str__(self) -> str:
-        return f"{self.id}: {self.aggressor} vs. {self.defender}"
+        return f"{self.aggressor} vs. {self.defender}"
+
+    @staticmethod
+    def fetch_war_ids_from_esi(max_items: int = 2000) -> Set[int]:
+        """Fetch IDs for new and unfinished wars from ESI.
+
+        Will ignore older wars which are known to be already finished.
+        """
+        logger.info("Fetching war IDs from ESI")
+        war_ids = []
+        war_ids_page = esi.client.Wars.get_wars().results(ignore_cache=True)
+        while True:
+            war_ids += war_ids_page
+            if (
+                len(war_ids_page) < max_items
+                or min(war_ids_page) < STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID
+            ):
+                break
+            max_war_id = min(war_ids)
+            war_ids_page = esi.client.Wars.get_wars(max_war_id=max_war_id).results(
+                ignore_cache=True
+            )
+        return set(
+            [
+                war_id
+                for war_id in war_ids
+                if war_id >= STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID
+            ]
+        )

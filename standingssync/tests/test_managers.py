@@ -217,39 +217,39 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
         self.assertIsNone(war.retracted)
         self.assertEqual(war.started, started)
 
-    @patch(MANAGERS_PATH + ".esi")
-    def test_should_not_create_object_from_esi_for_finished_war(self, mock_esi):
-        # given
-        declared = now() - dt.timedelta(days=5)
-        started = now() - dt.timedelta(days=4)
-        finished = now() - dt.timedelta(days=1)
-        esi_data = {
-            "aggressor": {
-                "alliance_id": 3001,
-                "isk_destroyed": 0,
-                "ships_killed": 0,
-            },
-            "allies": [{"alliance_id": 3003}, {"corporation_id": 2003}],
-            "declared": declared,
-            "defender": {
-                "alliance_id": 3002,
-                "isk_destroyed": 0,
-                "ships_killed": 0,
-            },
-            "finished": finished,
-            "id": 1,
-            "mutual": False,
-            "open_for_allies": True,
-            "retracted": None,
-            "started": started,
-        }
-        mock_esi.client.Wars.get_wars_war_id.return_value = BravadoOperationStub(
-            esi_data
-        )
-        # when
-        EveWar.objects.update_from_esi(id=1)
-        # then
-        self.assertFalse(EveWar.objects.filter(id=1).exists())
+    # @patch(MANAGERS_PATH + ".esi")
+    # def test_should_not_create_object_from_esi_for_finished_war(self, mock_esi):
+    #     # given
+    #     declared = now() - dt.timedelta(days=5)
+    #     started = now() - dt.timedelta(days=4)
+    #     finished = now() - dt.timedelta(days=1)
+    #     esi_data = {
+    #         "aggressor": {
+    #             "alliance_id": 3001,
+    #             "isk_destroyed": 0,
+    #             "ships_killed": 0,
+    #         },
+    #         "allies": [{"alliance_id": 3003}, {"corporation_id": 2003}],
+    #         "declared": declared,
+    #         "defender": {
+    #             "alliance_id": 3002,
+    #             "isk_destroyed": 0,
+    #             "ships_killed": 0,
+    #         },
+    #         "finished": finished,
+    #         "id": 1,
+    #         "mutual": False,
+    #         "open_for_allies": True,
+    #         "retracted": None,
+    #         "started": started,
+    #     }
+    #     mock_esi.client.Wars.get_wars_war_id.return_value = BravadoOperationStub(
+    #         esi_data
+    #     )
+    #     # when
+    #     EveWar.objects.update_from_esi(id=1)
+    #     # then
+    #     self.assertFalse(EveWar.objects.filter(id=1).exists())
 
     @patch(MANAGERS_PATH + ".esi")
     def test_should_update_existing_war_from_esi(self, mock_esi):
@@ -293,6 +293,16 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
         self.assertTrue(war.is_open_for_allies)
         self.assertEqual(war.retracted, retracted)
         self.assertEqual(war.started, self.war_started)
+
+
+class TestEveWarManager2(NoSocketsTestCase):
+    def test_should_return_unfinished_war_ids(self):
+        # given
+        EveWarFactory(id=42, finished=now() - dt.timedelta(days=1))
+        # when
+        result = EveWar.objects.unfinished_war_ids([1, 2, 42])
+        # then
+        self.assertSetEqual(result, {1, 2})
 
 
 class TestEveWarManagerActiveWars(NoSocketsTestCase):

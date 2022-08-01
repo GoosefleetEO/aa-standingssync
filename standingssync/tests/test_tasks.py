@@ -172,8 +172,9 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
+    @patch(MODELS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 1)
     @patch(TASKS_PATH + ".update_war")
-    @patch(TASKS_PATH + ".esi")
+    @patch(MODELS_PATH + ".esi")
     def test_should_start_tasks_for_each_war_id(self, mock_esi, mock_update_war):
         # given
         mock_esi.client.Wars.get_wars.return_value = BravadoOperationStub([1, 2, 3])
