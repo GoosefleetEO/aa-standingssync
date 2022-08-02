@@ -20,6 +20,7 @@ celery -A myauth call standingssync.tasks.run_regular_sync
 ### Changed
 
 - Migrated proprietary EveEntity to EveUniverse's EveEntity to enable ID to Name resolution
+- Update tasks are running with lower priority then default
 
 ### Fixed
 

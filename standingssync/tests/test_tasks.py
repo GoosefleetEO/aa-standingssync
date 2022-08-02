@@ -36,9 +36,9 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
             # when
             tasks.run_regular_sync()
         # then
-        self.assertTrue(mock_update_all_wars.delay.called)
-        args, _ = mock_run_manager_sync.delay.call_args
-        self.assertEqual(args[0], sync_manager.pk)
+        self.assertTrue(mock_update_all_wars.apply_async.called)
+        _, kwargs = mock_run_manager_sync.apply_async.call_args
+        self.assertListEqual(kwargs["args"], [sync_manager.pk])
 
     def test_abort_when_esi_if_offline(
         self, mock_update_all_wars, mock_run_manager_sync
@@ -48,8 +48,8 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
             # when
             tasks.run_regular_sync()
         # then
-        self.assertFalse(mock_update_all_wars.delay.called)
-        self.assertFalse(mock_run_manager_sync.delay.called)
+        self.assertFalse(mock_update_all_wars.apply_async.called)
+        self.assertFalse(mock_run_manager_sync.apply_async.called)
 
 
 class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
@@ -162,9 +162,9 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
         sync_manager.refresh_from_db()
         self.assertTrue(result)
         self.assertEqual(sync_manager.last_error, SyncManager.Error.NONE)
-        args, kwargs = mock_run_character_sync.delay.call_args
-        self.assertEqual(kwargs["sync_char_pk"], synced_character.pk)
-        self.assertFalse(kwargs["force_sync"])
+        _, kwargs = mock_run_character_sync.apply_async.call_args
+        self.assertEqual(kwargs["kwargs"]["sync_char_pk"], synced_character.pk)
+        self.assertFalse(kwargs["kwargs"]["force_sync"])
 
 
 @override_settings(CELERY_ALWAYS_EAGER=True, CELERY_EAGER_PROPAGATES_EXCEPTIONS=True)
@@ -183,7 +183,9 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
         # when
         tasks.update_all_wars()
         # then
-        result = {row[0][0] for row in mock_update_war.delay.call_args_list}
+        result = {
+            obj[1]["args"][0] for obj in mock_update_war.apply_async.call_args_list
+        }
         self.assertSetEqual(result, {1, 2, 3})
 
     @patch(TASKS_PATH + ".EveWar.objects.update_or_create_from_esi")
