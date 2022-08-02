@@ -20,7 +20,7 @@ STANDINGSSYNC_REPLACE_CONTACTS = clean_setting("STANDINGSSYNC_REPLACE_CONTACTS",
 
 # Smallest war ID to fetch from ESI. All wars with smaller IDs are known to be already finished. This is an optimization to avoid having to fetch >700K wars from ESI.
 STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID = clean_setting(
-    "STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 719886
+    "STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 719979
 )
 
 # IDs of unfinished wars, with IDs below the above minimum threshold
@@ -55,5 +55,6 @@ STANDINGSSYNC_SPECIAL_WAR_IDS = clean_setting(
         719745,
         719751,
         719854,
+        719890,
     ],
 )
