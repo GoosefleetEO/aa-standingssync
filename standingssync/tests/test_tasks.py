@@ -11,9 +11,14 @@ from app_utils.testing import (
 )
 
 from .. import tasks
-from ..models import SyncedCharacter, SyncManager
+from ..models import EveWar, SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
-from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
+from .factories import (
+    EveContactFactory,
+    EveWarFactory,
+    SyncedCharacterFactory,
+    SyncManagerFactory,
+)
 
 MANAGERS_PATH = "standingssync.managers"
 MODELS_PATH = "standingssync.models"
@@ -187,6 +192,21 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
             obj[1]["args"][0] for obj in mock_update_war.apply_async.call_args_list
         }
         self.assertSetEqual(result, {1, 2, 3})
+
+    @patch(TASKS_PATH + ".update_war")
+    @patch(TASKS_PATH + ".EveWar.objects.calc_relevant_war_ids")
+    def test_should_remove_older_finished_wars(
+        self, mock_calc_relevant_war_ids, mock_update_war
+    ):
+        # given
+        mock_calc_relevant_war_ids.return_value = [2]
+        EveWarFactory(id=1)
+        EveWarFactory(id=2)
+        # when
+        tasks.update_all_wars()
+        # then
+        current_war_ids = set(EveWar.objects.values_list("id", flat=True))
+        self.assertSetEqual(current_war_ids, {2})
 
     @patch(TASKS_PATH + ".EveWar.objects.update_or_create_from_esi")
     def test_should_update_war(self, mock_update_from_esi):
