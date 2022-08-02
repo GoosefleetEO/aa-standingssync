@@ -13,6 +13,9 @@ from .models import EveWar, SyncedCharacter, SyncManager
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
 
 
+DEFAULT_TASK_PRIORITY = 6
+
+
 @shared_task
 def run_regular_sync():
     """update all wars, managers and related characters if needed"""
@@ -20,9 +23,11 @@ def run_regular_sync():
         logger.warning("ESI is not online. aborting")
         return
 
-    update_all_wars.delay()
+    update_all_wars.apply_async(priority=DEFAULT_TASK_PRIORITY)
     for sync_manager_pk in SyncManager.objects.values_list("pk", flat=True):
-        run_manager_sync.delay(sync_manager_pk)
+        run_manager_sync.apply_async(
+            args=[sync_manager_pk], priority=DEFAULT_TASK_PRIORITY
+        )
 
 
 @shared_task
@@ -57,7 +62,10 @@ def run_manager_sync(manager_pk: int, force_sync: bool = False) -> bool:
             version_hash=new_version_hash
         ).values_list("pk", flat=True)
     for character_pk in alts_need_syncing:
-        run_character_sync.delay(sync_char_pk=character_pk, force_sync=force_sync)
+        run_character_sync.apply_async(
+            kwargs={"sync_char_pk": character_pk, "force_sync": force_sync},
+            priority=DEFAULT_TASK_PRIORITY,
+        )
 
     return True
 
@@ -85,13 +93,12 @@ def run_character_sync(sync_char_pk: int, force_sync: bool = False) -> bool:
 
 @shared_task
 def update_all_wars():
-    logger.info("Fetching wars from ESI")
-    war_ids = EveWar.fetch_war_ids_from_esi()
-    unfinished_war_ids = EveWar.objects.unfinished_war_ids(war_ids)
-    logger.info("Fetching details for %s wars from ESI", len(unfinished_war_ids))
-    for war_id in unfinished_war_ids:
-        update_war.delay(war_id)
-    update_unresolved_eve_entities.delay()
+    relevant_war_ids = EveWar.objects.calc_relevant_war_ids()
+    # EveWar.objects.exclude(id__in=relevant_war_ids).delete()
+    logger.info("Fetching details for %s wars from ESI", len(relevant_war_ids))
+    for war_id in relevant_war_ids:
+        update_war.apply_async(args=[war_id], priority=DEFAULT_TASK_PRIORITY)
+    update_unresolved_eve_entities.apply_async(priority=DEFAULT_TASK_PRIORITY)
 
 
 @shared_task

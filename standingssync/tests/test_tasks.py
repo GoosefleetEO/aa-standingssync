@@ -4,7 +4,6 @@ from django.test import TestCase, override_settings
 from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
-from app_utils.esi_testing import BravadoOperationStub
 from app_utils.testing import (
     NoSocketsTestCase,
     create_user_from_evecharacter,
@@ -16,8 +15,9 @@ from ..models import SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
 
-TASKS_PATH = "standingssync.tasks"
+MANAGERS_PATH = "standingssync.managers"
 MODELS_PATH = "standingssync.models"
+TASKS_PATH = "standingssync.tasks"
 
 
 @patch(TASKS_PATH + ".run_manager_sync")
@@ -36,9 +36,9 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
             # when
             tasks.run_regular_sync()
         # then
-        self.assertTrue(mock_update_all_wars.delay.called)
-        args, _ = mock_run_manager_sync.delay.call_args
-        self.assertEqual(args[0], sync_manager.pk)
+        self.assertTrue(mock_update_all_wars.apply_async.called)
+        _, kwargs = mock_run_manager_sync.apply_async.call_args
+        self.assertListEqual(kwargs["args"], [sync_manager.pk])
 
     def test_abort_when_esi_if_offline(
         self, mock_update_all_wars, mock_run_manager_sync
@@ -48,8 +48,8 @@ class TestRunRegularSync(LoadTestDataMixin, NoSocketsTestCase):
             # when
             tasks.run_regular_sync()
         # then
-        self.assertFalse(mock_update_all_wars.delay.called)
-        self.assertFalse(mock_run_manager_sync.delay.called)
+        self.assertFalse(mock_update_all_wars.apply_async.called)
+        self.assertFalse(mock_run_manager_sync.apply_async.called)
 
 
 class TestCharacterSync(LoadTestDataMixin, NoSocketsTestCase):
@@ -162,9 +162,9 @@ class TestManagerSync(LoadTestDataMixin, TestCase):
         sync_manager.refresh_from_db()
         self.assertTrue(result)
         self.assertEqual(sync_manager.last_error, SyncManager.Error.NONE)
-        args, kwargs = mock_run_character_sync.delay.call_args
-        self.assertEqual(kwargs["sync_char_pk"], synced_character.pk)
-        self.assertFalse(kwargs["force_sync"])
+        _, kwargs = mock_run_character_sync.apply_async.call_args
+        self.assertEqual(kwargs["kwargs"]["sync_char_pk"], synced_character.pk)
+        self.assertFalse(kwargs["kwargs"]["force_sync"])
 
 
 @override_settings(CELERY_ALWAYS_EAGER=True, CELERY_EAGER_PROPAGATES_EXCEPTIONS=True)
@@ -173,17 +173,35 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-    @patch(MODELS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 1)
     @patch(TASKS_PATH + ".update_war")
-    @patch(MODELS_PATH + ".esi")
-    def test_should_start_tasks_for_each_war_id(self, mock_esi, mock_update_war):
+    @patch(TASKS_PATH + ".EveWar.objects.calc_relevant_war_ids")
+    def test_should_start_tasks_for_each_war_id(
+        self, mock_calc_relevant_war_ids, mock_update_war
+    ):
         # given
-        mock_esi.client.Wars.get_wars.return_value = BravadoOperationStub([1, 2, 3])
+        mock_calc_relevant_war_ids.return_value = [1, 2, 3]
         # when
         tasks.update_all_wars()
         # then
-        result = {row[0][0] for row in mock_update_war.delay.call_args_list}
+        result = {
+            obj[1]["args"][0] for obj in mock_update_war.apply_async.call_args_list
+        }
         self.assertSetEqual(result, {1, 2, 3})
+
+    # @patch(TASKS_PATH + ".update_war")
+    # @patch(TASKS_PATH + ".EveWar.objects.calc_relevant_war_ids")
+    # def test_should_remove_older_finished_wars(
+    #     self, mock_calc_relevant_war_ids, mock_update_war
+    # ):
+    #     # given
+    #     mock_calc_relevant_war_ids.return_value = [2]
+    #     EveWarFactory(id=1)
+    #     EveWarFactory(id=2)
+    #     # when
+    #     tasks.update_all_wars()
+    #     # then
+    #     current_war_ids = set(EveWar.objects.values_list("id", flat=True))
+    #     self.assertSetEqual(current_war_ids, {2})
 
     @patch(TASKS_PATH + ".EveWar.objects.update_or_create_from_esi")
     def test_should_update_war(self, mock_update_from_esi):

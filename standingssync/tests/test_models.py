@@ -1143,22 +1143,3 @@ class TestEveWar(NoSocketsTestCase):
         war = EveWarFactory(aggressor=aggressor, defender=defender)
         # when/then
         self.assertEqual(str(war), "Alpha vs. Bravo")
-
-    @patch(MODELS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 4)
-    @patch(MODELS_PATH + ".esi")
-    def test_should_fetch_war_ids_with_paging(self, mock_esi):
-        def esi_get_wars(max_war_id=None):
-            if max_war_id:
-                war_ids = [war_id for war_id in esi_war_ids if war_id < max_war_id]
-            else:
-                war_ids = esi_war_ids
-            return BravadoOperationStub(sorted(war_ids, reverse=True)[:page_size])
-
-        # given
-        esi_war_ids = [1, 2, 3, 4, 5, 6, 7, 8]
-        page_size = 3
-        mock_esi.client.Wars.get_wars.side_effect = esi_get_wars
-        # when
-        result = EveWar.fetch_war_ids_from_esi(max_items=3)
-        # then
-        self.assertSetEqual(result, {4, 5, 6, 7, 8})
