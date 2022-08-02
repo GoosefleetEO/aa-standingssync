@@ -8,6 +8,7 @@ from allianceauth.authentication.models import CharacterOwnership
 from app_utils.esi_testing import BravadoOperationStub
 from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
+from ..managers import EveWarManager
 from ..models import EveWar
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import (
@@ -19,6 +20,7 @@ from .factories import (
 )
 
 MANAGERS_PATH = "standingssync.managers"
+MODELS_PATH = "standingssync.models"
 
 
 class TestEveContactManager(LoadTestDataMixin, NoSocketsTestCase):
@@ -296,13 +298,34 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
 
 
 class TestEveWarManager2(NoSocketsTestCase):
-    def test_should_return_unfinished_war_ids(self):
+    @patch(MODELS_PATH + ".EveWar.objects.fetch_war_ids_from_esi")
+    def test_should_return_relevant_war_ids(self, mock_fetch_war_ids_from_esi):
         # given
+        mock_fetch_war_ids_from_esi.return_value = [1, 2, 42]
         EveWarFactory(id=42, finished=now() - dt.timedelta(days=1))
         # when
-        result = EveWar.objects.unfinished_war_ids([1, 2, 42])
+        result = EveWar.objects.calc_relevant_war_ids()
         # then
         self.assertSetEqual(result, {1, 2})
+
+    @patch(MANAGERS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 4)
+    @patch(MANAGERS_PATH + ".esi")
+    def test_should_fetch_war_ids_with_paging(self, mock_esi):
+        def esi_get_wars(max_war_id=None):
+            if max_war_id:
+                war_ids = [war_id for war_id in esi_war_ids if war_id < max_war_id]
+            else:
+                war_ids = esi_war_ids
+            return BravadoOperationStub(sorted(war_ids, reverse=True)[:page_size])
+
+        # given
+        esi_war_ids = [1, 2, 3, 4, 5, 6, 7, 8]
+        page_size = 3
+        mock_esi.client.Wars.get_wars.side_effect = esi_get_wars
+        # when
+        result = EveWarManager.fetch_war_ids_from_esi(max_items=3)
+        # then
+        self.assertSetEqual(result, {4, 5, 6, 7, 8})
 
 
 class TestEveWarManagerActiveWars(NoSocketsTestCase):

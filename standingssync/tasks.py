@@ -85,11 +85,9 @@ def run_character_sync(sync_char_pk: int, force_sync: bool = False) -> bool:
 
 @shared_task
 def update_all_wars():
-    logger.info("Fetching wars from ESI")
-    war_ids = EveWar.fetch_war_ids_from_esi()
-    unfinished_war_ids = EveWar.objects.unfinished_war_ids(war_ids)
-    logger.info("Fetching details for %s wars from ESI", len(unfinished_war_ids))
-    for war_id in unfinished_war_ids:
+    relevant_war_ids = EveWar.objects.calc_relevant_war_ids()
+    logger.info("Fetching details for %s wars from ESI", len(relevant_war_ids))
+    for war_id in relevant_war_ids:
         update_war.delay(war_id)
     update_unresolved_eve_entities.delay()
 

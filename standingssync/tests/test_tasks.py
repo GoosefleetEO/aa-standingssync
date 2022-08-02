@@ -4,7 +4,6 @@ from django.test import TestCase, override_settings
 from eveuniverse.models import EveEntity
 
 from allianceauth.authentication.models import CharacterOwnership
-from app_utils.esi_testing import BravadoOperationStub
 from app_utils.testing import (
     NoSocketsTestCase,
     create_user_from_evecharacter,
@@ -16,8 +15,9 @@ from ..models import SyncedCharacter, SyncManager
 from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
 
-TASKS_PATH = "standingssync.tasks"
+MANAGERS_PATH = "standingssync.managers"
 MODELS_PATH = "standingssync.models"
+TASKS_PATH = "standingssync.tasks"
 
 
 @patch(TASKS_PATH + ".run_manager_sync")
@@ -173,12 +173,13 @@ class TestUpdateWars(LoadTestDataMixin, NoSocketsTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-    @patch(MODELS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 1)
     @patch(TASKS_PATH + ".update_war")
-    @patch(MODELS_PATH + ".esi")
-    def test_should_start_tasks_for_each_war_id(self, mock_esi, mock_update_war):
+    @patch(TASKS_PATH + ".EveWar.objects.calc_relevant_war_ids")
+    def test_should_start_tasks_for_each_war_id(
+        self, mock_calc_relevant_war_ids, mock_update_war
+    ):
         # given
-        mock_esi.client.Wars.get_wars.return_value = BravadoOperationStub([1, 2, 3])
+        mock_calc_relevant_war_ids.return_value = [1, 2, 3]
         # when
         tasks.update_all_wars()
         # then
