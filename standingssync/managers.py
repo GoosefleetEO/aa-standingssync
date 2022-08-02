@@ -8,7 +8,10 @@ from allianceauth.services.hooks import get_extension_logger
 from app_utils.logging import LoggerAddTag
 
 from . import __title__
-from .app_settings import STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID
+from .app_settings import (
+    STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID,
+    STANDINGSSYNC_SPECIAL_WAR_IDS,
+)
 from .providers import esi
 
 logger = LoggerAddTag(get_extension_logger(__name__), __title__)
@@ -121,6 +124,7 @@ class EveWarManagerBase(models.Manager):
         """Determine IDs from unfinished and new wars."""
         logger.info("Fetching wars from ESI")
         war_ids = self.fetch_war_ids_from_esi()
+        war_ids = war_ids.union(set(STANDINGSSYNC_SPECIAL_WAR_IDS))
         finished_war_ids = set(self.finished_wars().values_list("id", flat=True))
         war_ids = set(war_ids)
         return war_ids.difference(finished_war_ids)

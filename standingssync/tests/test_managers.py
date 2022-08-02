@@ -298,15 +298,16 @@ class TestEveWarManager(LoadTestDataMixin, NoSocketsTestCase):
 
 
 class TestEveWarManager2(NoSocketsTestCase):
+    @patch(MANAGERS_PATH + ".STANDINGSSYNC_SPECIAL_WAR_IDS", [3, 4])
     @patch(MODELS_PATH + ".EveWar.objects.fetch_war_ids_from_esi")
     def test_should_return_relevant_war_ids(self, mock_fetch_war_ids_from_esi):
         # given
-        mock_fetch_war_ids_from_esi.return_value = [1, 2, 42]
+        mock_fetch_war_ids_from_esi.return_value = {1, 2, 42}
         EveWarFactory(id=42, finished=now() - dt.timedelta(days=1))
         # when
         result = EveWar.objects.calc_relevant_war_ids()
         # then
-        self.assertSetEqual(result, {1, 2})
+        self.assertSetEqual(result, {1, 2, 3, 4})
 
     @patch(MANAGERS_PATH + ".STANDINGSSYNC_MINIMUM_UNFINISHED_WAR_ID", 4)
     @patch(MANAGERS_PATH + ".esi")
