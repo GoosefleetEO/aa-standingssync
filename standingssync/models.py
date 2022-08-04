@@ -242,8 +242,8 @@ class SyncedCharacter(_SyncBaseModel):
         return self.character_ownership.character.character_name
 
     @property
-    def character_id(self) -> int:
-        return self.character_ownership.character.character_id
+    def character(self) -> int:
+        return self.character_ownership.character
 
     def get_status_message(self):
         if self.last_error != self.Error.NONE:

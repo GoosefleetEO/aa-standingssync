@@ -748,7 +748,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @patch(MODELS_PATH + ".esi")
     def test_should_remove_outdated_war_targets_with_label(self, mock_esi, mock_Token):
         # given
-        character_id = self.synced_character_2.character_id
+        character_id = self.synced_character_2.character.character_id
         esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(

@@ -2,6 +2,7 @@
 
 import copy
 from enum import Enum
+from typing import List
 
 from eveuniverse.models import EveEntity
 
@@ -248,7 +249,7 @@ class EsiCharacterContactsStub:
         self._contacts = dict()
         self._labels = dict()
 
-    def setup_contacts(self, character_id: int, contacts: list):
+    def setup_contacts(self, character_id: int, contacts: List[EsiContactStub]):
         self._contacts[character_id] = dict()
         if character_id not in self._labels:
             self._labels[character_id] = dict()
@@ -265,8 +266,8 @@ class EsiCharacterContactsStub:
     def contacts(self, character_id: int) -> dict:
         return self._contacts[character_id].values()
 
-    def character_contact(self, character_id, contact_id):
-        return self._contacts[character_id].values()
+    def character_contact(self, character_id: int, contact_id: int) -> EsiContactStub:
+        return self._contacts[character_id][contact_id]
 
     def labels(self, character_id: int) -> dict:
         return self._labels[character_id] if character_id in self._labels else dict()
@@ -290,16 +291,24 @@ class EsiCharacterContactsStub:
         )
 
     def _esi_get_characters_character_id_contacts(self, character_id, token, page=None):
-        contacts = [obj.to_esi_dict() for obj in self._contacts[character_id].values()]
+        if character_id in self._contacts:
+            contacts = [
+                obj.to_esi_dict() for obj in self._contacts[character_id].values()
+            ]
+        else:
+            contacts = []
         return BravadoOperationStub(contacts)
 
     def _esi_get_characters_character_id_contacts_labels(
         self, character_id, token, page=None
     ):
-        labels = [
-            {"label_id": k, "label_name": v}
-            for k, v in self._labels[character_id].items()
-        ]
+        if character_id in self._contacts:
+            labels = [
+                {"label_id": k, "label_name": v}
+                for k, v in self._labels[character_id].items()
+            ]
+        else:
+            labels = []
         return BravadoOperationStub(labels)
 
     def _esi_post_characters_character_id_contacts(
@@ -307,15 +316,17 @@ class EsiCharacterContactsStub:
     ):
         self._check_label_ids_valid(character_id, label_ids)
         contact_type_map = {
-            1: EsiContactStub.ContactType.CHARACTER,
-            2: EsiContactStub.ContactType.CORPORATION,
-            3: EsiContactStub.ContactType.ALLIANCE,
+            EveEntity.CATEGORY_CHARACTER: EsiContactStub.ContactType.CHARACTER,
+            EveEntity.CATEGORY_CORPORATION: EsiContactStub.ContactType.CORPORATION,
+            EveEntity.CATEGORY_ALLIANCE: EsiContactStub.ContactType.ALLIANCE,
         }
+        if character_id not in self._contacts:
+            self._contacts[character_id] = dict()
         for contact_id in contact_ids:
-            contact_type = contact_type_map[contact_id // 1000]
+            eve_entity = EveEntity.objects.get(id=contact_id)
             self._contacts[character_id][contact_id] = EsiContactStub(
                 contact_id=contact_id,
-                contact_type=contact_type,
+                contact_type=contact_type_map[eve_entity.category],
                 standing=standing,
                 label_ids=label_ids,
             )

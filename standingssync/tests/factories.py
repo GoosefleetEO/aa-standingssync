@@ -106,6 +106,14 @@ class SyncManagerFactory(factory.django.DjangoModelFactory):
     def character_ownership(self):
         return self.user.profile.main_character.character_ownership
 
+    @factory.post_generation
+    def create_eve_entities(self, create, extracted, **kwargs):
+        if not create:
+            return
+        EveEntityAllianceFactory(
+            id=self.alliance.alliance_id, name=self.alliance.alliance_name
+        )
+
 
 class SyncedCharacterFactory(factory.django.DjangoModelFactory):
     class Meta:
