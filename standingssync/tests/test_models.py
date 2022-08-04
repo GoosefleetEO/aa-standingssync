@@ -748,9 +748,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @patch(MODELS_PATH + ".esi")
     def test_should_remove_outdated_war_targets_with_label(self, mock_esi, mock_Token):
         # given
-        character_id = (
-            self.synced_character_2.character_ownership.character.character_id
-        )
+        character_id = self.synced_character_2.character_id
         esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_labels(character_id, {1: "war targets"})
         esi_character_contacts.setup_contacts(
@@ -844,21 +842,7 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @staticmethod
     def _run_sync(mock_esi, mock_Token, synced_character, esi_character_contacts):
         # given
-        mock_esi.client.Contacts.get_characters_character_id_contacts.side_effect = (
-            esi_character_contacts.esi_get_characters_character_id_contacts
-        )
-        mock_esi.client.Contacts.delete_characters_character_id_contacts.side_effect = (
-            esi_character_contacts.esi_delete_characters_character_id_contacts
-        )
-        mock_esi.client.Contacts.post_characters_character_id_contacts = (
-            esi_character_contacts.esi_post_characters_character_id_contacts
-        )
-        mock_esi.client.Contacts.put_characters_character_id_contacts = (
-            esi_character_contacts.esi_put_characters_character_id_contacts
-        )
-        mock_esi.client.Contacts.get_characters_character_id_contacts_labels = (
-            esi_character_contacts.esi_get_characters_character_id_contacts_labels
-        )
+        esi_character_contacts.setup_esi_mock(mock_esi)
         mock_Token.objects.filter = Mock()
         synced_character.character_ownership.user = (
             AuthUtils.add_permission_to_user_by_name(

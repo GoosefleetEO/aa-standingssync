@@ -12,6 +12,18 @@ from allianceauth.eveonline.models import (
 )
 from app_utils.esi_testing import BravadoOperationStub
 
+
+def create_esi_contact(eve_entity: EveEntity, standing: int = 5.0) -> dict:
+    if standing < -10 or standing > 10:
+        raise ValueError(f"Invalid standing: {standing}")
+    params = {
+        "contact_id": int(eve_entity.id),
+        "contact_type": eve_entity.category,
+        "standing": float(standing),
+    }
+    return params
+
+
 ALLIANCE_CONTACTS = [
     {"contact_id": 1002, "contact_type": "character", "standing": 10.0},
     {"contact_id": 1004, "contact_type": "character", "standing": 10.0},
@@ -253,14 +265,35 @@ class EsiCharacterContactsStub:
     def contacts(self, character_id: int) -> dict:
         return self._contacts[character_id].values()
 
+    def character_contact(self, character_id, contact_id):
+        return self._contacts[character_id].values()
+
     def labels(self, character_id: int) -> dict:
         return self._labels[character_id] if character_id in self._labels else dict()
 
-    def esi_get_characters_character_id_contacts(self, character_id, token, page=None):
+    def setup_esi_mock(self, mock_esi):
+        """Sets the mock for ESI to this object."""
+        mock_esi.client.Contacts.get_characters_character_id_contacts.side_effect = (
+            self._esi_get_characters_character_id_contacts
+        )
+        mock_esi.client.Contacts.delete_characters_character_id_contacts.side_effect = (
+            self._esi_delete_characters_character_id_contacts
+        )
+        mock_esi.client.Contacts.post_characters_character_id_contacts = (
+            self._esi_post_characters_character_id_contacts
+        )
+        mock_esi.client.Contacts.put_characters_character_id_contacts = (
+            self._esi_put_characters_character_id_contacts
+        )
+        mock_esi.client.Contacts.get_characters_character_id_contacts_labels = (
+            self._esi_get_characters_character_id_contacts_labels
+        )
+
+    def _esi_get_characters_character_id_contacts(self, character_id, token, page=None):
         contacts = [obj.to_esi_dict() for obj in self._contacts[character_id].values()]
         return BravadoOperationStub(contacts)
 
-    def esi_get_characters_character_id_contacts_labels(
+    def _esi_get_characters_character_id_contacts_labels(
         self, character_id, token, page=None
     ):
         labels = [
@@ -269,7 +302,7 @@ class EsiCharacterContactsStub:
         ]
         return BravadoOperationStub(labels)
 
-    def esi_post_characters_character_id_contacts(
+    def _esi_post_characters_character_id_contacts(
         self, character_id, contact_ids, standing, token, label_ids=None
     ):
         self._check_label_ids_valid(character_id, label_ids)
@@ -288,7 +321,7 @@ class EsiCharacterContactsStub:
             )
         return BravadoOperationStub([])
 
-    def esi_put_characters_character_id_contacts(
+    def _esi_put_characters_character_id_contacts(
         self, character_id, contact_ids, standing, token, label_ids=None
     ):
         self._check_label_ids_valid(character_id, label_ids)
@@ -301,7 +334,7 @@ class EsiCharacterContactsStub:
                     self._contacts[character_id][contact_id].label_ids += label_ids
         return BravadoOperationStub([])
 
-    def esi_delete_characters_character_id_contacts(
+    def _esi_delete_characters_character_id_contacts(
         self, character_id, contact_ids, token
     ):
         for contact_id in contact_ids:
