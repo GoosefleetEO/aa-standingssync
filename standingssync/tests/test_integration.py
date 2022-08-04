@@ -42,8 +42,9 @@ class TestIntegration(NoSocketsTestCase):
         # when
         run_manager_sync.delay(manager_pk=manager.pk)
         # then
-        self.assertTrue(
-            esi_character_contacts.character_contact(
-                sync_character.character.character_id, my_alliance_contact.id
-            )
-        )
+        character_contact_ids = esi_character_contacts._contacts[
+            sync_character.character.character_id
+        ]
+        self.assertIn(my_alliance_contact.id, character_contact_ids)
+        self.assertIn(manager.alliance.alliance_id, character_contact_ids)
+        self.assertNotIn(sync_character.character.character_id, character_contact_ids)

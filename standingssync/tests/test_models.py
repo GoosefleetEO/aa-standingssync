@@ -586,9 +586,11 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         # then
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
+        alliance_contacts_2 = {
+            obj for obj in self.alliance_contacts if obj.contact_id != character_id
+        }
         self.assertSetEqual(
-            set(esi_character_contacts.contacts(character_id)),
-            set(self.alliance_contacts),
+            set(esi_character_contacts.contacts(character_id)), alliance_contacts_2
         )
 
     @patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", False)
