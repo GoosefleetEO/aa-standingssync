@@ -12,8 +12,8 @@ from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
 from .. import views
 from ..models import EveEntity, SyncedCharacter, SyncManager
-from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
+from .utils import ALLIANCE_CONTACTS, LoadTestDataMixin
 
 MODULE_PATH = "standingssync.views"
 

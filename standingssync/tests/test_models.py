@@ -16,7 +16,6 @@ from app_utils.esi_testing import BravadoOperationStub
 from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
 from ..models import EveContact, EveWar, SyncedCharacter, SyncManager
-from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import (
     EveContactFactory,
     EveContactWarTargetFactory,
@@ -26,6 +25,7 @@ from .factories import (
     SyncManagerFactory,
     UserMainSyncerFactory,
 )
+from .utils import ALLIANCE_CONTACTS, LoadTestDataMixin
 
 MODELS_PATH = "standingssync.models"
 
