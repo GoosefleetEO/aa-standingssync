@@ -8,6 +8,7 @@ from app_utils.testing import NoSocketsTestCase
 
 from ..tasks import run_manager_sync
 from .factories import (
+    EveEntityAllianceFactory,
     EveEntityCharacterFactory,
     EveWarFactory,
     SyncedCharacterFactory,
@@ -54,7 +55,7 @@ class TestIntegration(NoSocketsTestCase):
         )
 
     @patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", True)
-    def test_should_sync_manager_and_character_with_wt(self, mock_esi):
+    def test_should_sync_manager_and_character_with_wt_as_defender(self, mock_esi):
         # given
         manager = SyncManagerFactory()
         alliance = EveEntity.objects.get(id=manager.alliance.alliance_id)
@@ -83,6 +84,42 @@ class TestIntegration(NoSocketsTestCase):
         self.assertEqual(character_contacts[my_alliance_contact.id].standing, 5)
         self.assertEqual(character_contacts[manager.alliance.alliance_id].standing, 10)
         self.assertEqual(character_contacts[war.aggressor.id].standing, -10)
+        self.assertNotIn(
+            sync_character.character.character_id, character_contacts.keys()
+        )
+
+    @patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", True)
+    def test_should_sync_manager_and_character_with_wt_as_aggressor(self, mock_esi):
+        # given
+        manager = SyncManagerFactory()
+        alliance = EveEntity.objects.get(id=manager.alliance.alliance_id)
+        ally = EveEntityAllianceFactory()
+        war = EveWarFactory(aggressor=alliance, allies=[ally])
+        sync_character = SyncedCharacterFactory(manager=manager)
+        character = EveEntityCharacterFactory(
+            id=sync_character.character.character_id,
+            name=sync_character.character.character_name,
+        )
+        my_alliance_contact = EveEntityCharacterFactory()
+        alliance_contacts = [
+            create_esi_contact(character),
+            create_esi_contact(my_alliance_contact),
+        ]
+        mock_esi.client.Contacts.get_alliances_alliance_id_contacts.return_value = (
+            BravadoOperationStub(alliance_contacts)
+        )
+        esi_character_contacts = EsiCharacterContactsStub()
+        esi_character_contacts.setup_esi_mock(mock_esi)
+        # when
+        run_manager_sync.delay(manager_pk=manager.pk)
+        # then
+        character_contacts = esi_character_contacts._contacts[
+            sync_character.character.character_id
+        ]
+        self.assertEqual(character_contacts[my_alliance_contact.id].standing, 5)
+        self.assertEqual(character_contacts[manager.alliance.alliance_id].standing, 10)
+        self.assertEqual(character_contacts[war.defender.id].standing, -10)
+        self.assertEqual(character_contacts[ally.id].standing, -10)
         self.assertNotIn(
             sync_character.character.character_id, character_contacts.keys()
         )
