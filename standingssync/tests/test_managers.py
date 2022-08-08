@@ -10,7 +10,6 @@ from app_utils.testing import NoSocketsTestCase, create_user_from_evecharacter
 
 from ..managers import EveWarManager
 from ..models import EveWar
-from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import (
     EveContactFactory,
     EveEntityAllianceFactory,
@@ -18,6 +17,7 @@ from .factories import (
     SyncedCharacterFactory,
     SyncManagerFactory,
 )
+from .utils import ALLIANCE_CONTACTS, LoadTestDataMixin
 
 MANAGERS_PATH = "standingssync.managers"
 MODELS_PATH = "standingssync.models"

@@ -94,7 +94,6 @@ def run_character_sync(sync_char_pk: int, force_sync: bool = False) -> bool:
 @shared_task
 def update_all_wars():
     relevant_war_ids = EveWar.objects.calc_relevant_war_ids()
-    # EveWar.objects.exclude(id__in=relevant_war_ids).delete()
     logger.info("Fetching details for %s wars from ESI", len(relevant_war_ids))
     for war_id in relevant_war_ids:
         update_war.apply_async(args=[war_id], priority=DEFAULT_TASK_PRIORITY)

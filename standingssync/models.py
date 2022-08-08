@@ -241,6 +241,10 @@ class SyncedCharacter(_SyncBaseModel):
     def __str__(self):
         return self.character_ownership.character.character_name
 
+    @property
+    def character(self) -> int:
+        return self.character_ownership.character
+
     def get_status_message(self):
         if self.last_error != self.Error.NONE:
             return self.get_last_error_display()
@@ -350,9 +354,11 @@ class SyncedCharacter(_SyncBaseModel):
                 self._esi_update(
                     character_id=character_id,
                     token=token,
-                    contacts_by_standing=self.manager.contacts.filter(
-                        is_war_target=False
-                    ).grouped_by_standing(),
+                    contacts_by_standing=self.manager.contacts.exclude(
+                        eve_entity_id=character_id
+                    )
+                    .filter(is_war_target=False)
+                    .grouped_by_standing(),
                     esi_method=esi.client.Contacts.post_characters_character_id_contacts,
                 )
                 self._esi_update(
@@ -369,7 +375,9 @@ class SyncedCharacter(_SyncBaseModel):
                 self._esi_update(
                     character_id=character_id,
                     token=token,
-                    contacts_by_standing=self.manager.contacts.all().grouped_by_standing(),
+                    contacts_by_standing=self.manager.contacts.exclude(
+                        eve_entity_id=character_id
+                    ).grouped_by_standing(),
                     esi_method=esi.client.Contacts.post_characters_character_id_contacts,
                 )
         else:

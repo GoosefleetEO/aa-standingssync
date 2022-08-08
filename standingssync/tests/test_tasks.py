@@ -12,8 +12,8 @@ from app_utils.testing import (
 
 from .. import tasks
 from ..models import SyncedCharacter, SyncManager
-from . import ALLIANCE_CONTACTS, LoadTestDataMixin
 from .factories import EveContactFactory, SyncedCharacterFactory, SyncManagerFactory
+from .utils import ALLIANCE_CONTACTS, LoadTestDataMixin
 
 MANAGERS_PATH = "standingssync.managers"
 MODELS_PATH = "standingssync.models"

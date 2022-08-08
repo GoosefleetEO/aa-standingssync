@@ -71,18 +71,19 @@ esi-alliances.read_contacts.v1
 
 Configure your AA settings (`local.py`) as follows:
 
-- Add `'standingssync'` to `INSTALLED_APPS`
-- Add these lines add to bottom of your settings file:
+Add `'standingssync'` to `INSTALLED_APPS`
 
-   ```python
-   # settings for standingssync
-   CELERYBEAT_SCHEDULE['standingssync.run_regular_sync'] = {
-       'task': 'standingssync.tasks.run_regular_sync',
-       'schedule': crontab(minute=0, hour='*/2')
-   }
-   ```
+Add these lines add to bottom of your settings file:
 
-   > **Note**:<br>This configures the sync process to run every 2 hours starting at 00:00 AM UTC. Feel free to adjust the timing to the needs of you alliance.<br>However, do not schedule it too tightly. Or you risk generating more and more tasks, when sync tasks from previous runs are not able to finish within the alloted time.
+```python
+# settings for standingssync
+CELERYBEAT_SCHEDULE['standingssync.run_regular_sync'] = {
+    'task': 'standingssync.tasks.run_regular_sync',
+    'schedule': crontab(minute=0, hour='*/2')
+}
+```
+
+> **Note**:<br>This configures the sync process to run every 2 hours starting at 00:00 AM UTC. Feel free to adjust the timing to the needs of you alliance.<br>However, do not schedule it too tightly. Or you risk generating more and more tasks, when sync tasks from previous runs are not able to finish within the alloted time.
 
 ### 4. Finalize installation into AA
 
