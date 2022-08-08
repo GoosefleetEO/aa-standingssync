@@ -14,7 +14,7 @@ from .factories import (
     SyncedCharacterFactory,
     SyncManagerFactory,
 )
-from .utils import EsiCharacterContactsStub, create_esi_contact
+from .utils import EsiCharacterContactsStub, EsiContactStub, create_esi_contact
 
 MODELS_PATH = "standingssync.models"
 
@@ -110,16 +110,21 @@ class TestIntegration(NoSocketsTestCase):
         )
         esi_character_contacts = EsiCharacterContactsStub()
         esi_character_contacts.setup_esi_mock(mock_esi)
+        esi_character_contacts.setup_labels(character.id, {1: "WAR TARGETS"})
         # when
         run_manager_sync.delay(manager_pk=manager.pk)
         # then
-        character_contacts = esi_character_contacts._contacts[
-            sync_character.character.character_id
-        ]
-        self.assertEqual(character_contacts[my_alliance_contact.id].standing, 5)
-        self.assertEqual(character_contacts[manager.alliance.alliance_id].standing, 10)
-        self.assertEqual(character_contacts[war.defender.id].standing, -10)
-        self.assertEqual(character_contacts[ally.id].standing, -10)
-        self.assertNotIn(
-            sync_character.character.character_id, character_contacts.keys()
+        expected = {
+            EsiContactStub.from_eve_entity(my_alliance_contact, standing=5),
+            EsiContactStub(
+                manager.alliance.alliance_id,
+                EsiContactStub.ContactType.ALLIANCE,
+                standing=10,
+            ),
+            EsiContactStub.from_eve_entity(war.defender, standing=-10),
+            EsiContactStub.from_eve_entity(ally, standing=-10),
+        }
+        self.assertSetEqual(
+            set(esi_character_contacts.contacts(sync_character.character.character_id)),
+            expected,
         )
