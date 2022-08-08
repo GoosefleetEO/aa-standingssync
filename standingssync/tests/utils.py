@@ -171,9 +171,22 @@ def auth_to_eve_entities():
         )
 
 
+@dataclass(frozen=True)
+class EsiContactLabel:
+    id: int
+    name: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", int(self.id))
+        object.__setattr__(self, "name", str(self.name))
+
+    def to_dict(self) -> dict:
+        return {self.id: self.name}
+
+
 @dataclass(unsafe_hash=True)
-class EsiContactStub:
-    """A contact in the ESI contact stub."""
+class EsiContact:
+    """A contact in the ESI character contacts stub."""
 
     class ContactType(str, Enum):
         CHARACTER = "character"
@@ -213,7 +226,7 @@ class EsiContactStub:
     @classmethod
     def from_eve_entity(
         cls, eve_entity: EveEntity, standing: float, label_ids=None
-    ) -> "EsiContactStub":
+    ) -> "EsiContact":
         """Create new instance from an EveEntity object."""
         contact_type_map = {
             EveEntity.CATEGORY_ALLIANCE: cls.ContactType.ALLIANCE,
@@ -235,7 +248,7 @@ class EsiCharacterContactsStub:
         self._contacts = dict()
         self._labels = dict()
 
-    def setup_contacts(self, character_id: int, contacts: List[EsiContactStub]):
+    def setup_contacts(self, character_id: int, contacts: List[EsiContact]):
         self._contacts[character_id] = dict()
         if character_id not in self._labels:
             self._labels[character_id] = dict()
@@ -246,13 +259,13 @@ class EsiCharacterContactsStub:
                         raise ValueError(f"Invalid label_id: {label_id}")
             self._contacts[character_id][contact.contact_id] = copy.deepcopy(contact)
 
-    def setup_labels(self, character_id: int, labels: dict):
-        self._labels[character_id] = dict(labels)
+    def setup_labels(self, character_id: int, labels: List[EsiContact]):
+        self._labels[character_id] = {obj.id: obj.name for obj in labels}
 
     def contacts(self, character_id: int) -> dict:
         return self._contacts[character_id].values()
 
-    def character_contact(self, character_id: int, contact_id: int) -> EsiContactStub:
+    def character_contact(self, character_id: int, contact_id: int) -> EsiContact:
         return self._contacts[character_id][contact_id]
 
     def labels(self, character_id: int) -> dict:
@@ -288,7 +301,7 @@ class EsiCharacterContactsStub:
     def _esi_get_characters_character_id_contacts_labels(
         self, character_id, token, page=None
     ):
-        if character_id in self._contacts:
+        if character_id in self._labels:
             labels = [
                 {"label_id": k, "label_name": v}
                 for k, v in self._labels[character_id].items()
@@ -302,15 +315,15 @@ class EsiCharacterContactsStub:
     ):
         self._check_label_ids_valid(character_id, label_ids)
         contact_type_map = {
-            EveEntity.CATEGORY_CHARACTER: EsiContactStub.ContactType.CHARACTER,
-            EveEntity.CATEGORY_CORPORATION: EsiContactStub.ContactType.CORPORATION,
-            EveEntity.CATEGORY_ALLIANCE: EsiContactStub.ContactType.ALLIANCE,
+            EveEntity.CATEGORY_CHARACTER: EsiContact.ContactType.CHARACTER,
+            EveEntity.CATEGORY_CORPORATION: EsiContact.ContactType.CORPORATION,
+            EveEntity.CATEGORY_ALLIANCE: EsiContact.ContactType.ALLIANCE,
         }
         if character_id not in self._contacts:
             self._contacts[character_id] = dict()
         for contact_id in contact_ids:
             eve_entity = EveEntity.objects.get(id=contact_id)
-            self._contacts[character_id][contact_id] = EsiContactStub(
+            self._contacts[character_id][contact_id] = EsiContact(
                 contact_id=contact_id,
                 contact_type=contact_type_map[eve_entity.category],
                 standing=standing,

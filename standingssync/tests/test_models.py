@@ -26,7 +26,8 @@ from .factories import (
 from .utils import (
     ALLIANCE_CONTACTS,
     EsiCharacterContactsStub,
-    EsiContactStub,
+    EsiContact,
+    EsiContactLabel,
     LoadTestDataMixin,
 )
 
@@ -437,9 +438,9 @@ class TestSyncManager2(NoSocketsTestCase):
 @patch(MODELS_PATH + ".STANDINGSSYNC_WAR_TARGETS_LABEL_NAME", "WAR TARGETS")
 class TestSyncCharacter(LoadTestDataMixin, TestCase):
     CHARACTER_CONTACTS = [
-        EsiContactStub(1014, EsiContactStub.ContactType.CHARACTER, standing=10.0),
-        EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
-        EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+        EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=10.0),
+        EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
+        EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
     ]
 
     @classmethod
@@ -474,11 +475,11 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
     @staticmethod
     def eve_contact_2_esi_contact(eve_contact):
         map_category_2_type = {
-            EveEntity.CATEGORY_CHARACTER: EsiContactStub.ContactType.CHARACTER,
-            EveEntity.CATEGORY_CORPORATION: EsiContactStub.ContactType.CORPORATION,
-            EveEntity.CATEGORY_ALLIANCE: EsiContactStub.ContactType.ALLIANCE,
+            EveEntity.CATEGORY_CHARACTER: EsiContact.ContactType.CHARACTER,
+            EveEntity.CATEGORY_CORPORATION: EsiContact.ContactType.CORPORATION,
+            EveEntity.CATEGORY_ALLIANCE: EsiContact.ContactType.ALLIANCE,
         }
-        return EsiContactStub(
+        return EsiContact(
             contact_id=eve_contact.eve_entity_id,
             contact_type=map_category_2_type[eve_contact.eve_entity.category],
             standing=eve_contact.standing,
@@ -631,7 +632,9 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
             self.synced_character_2.character_ownership.character.character_id
         )
         esi_character_contacts = EsiCharacterContactsStub()
-        esi_character_contacts.setup_labels(character_id, {1: "war targets"})
+        esi_character_contacts.setup_labels(
+            character_id, [EsiContactLabel(1, "war targets")]
+        )
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
@@ -640,38 +643,34 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         # then
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
+        result = set(esi_character_contacts.contacts(character_id))
         expected = {
-            EsiContactStub(
+            EsiContact(
                 1014,
-                EsiContactStub.ContactType.CHARACTER,
+                EsiContact.ContactType.CHARACTER,
                 standing=-10.0,
                 label_ids=[1],
             ),
-            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
-            EsiContactStub(
-                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+            EsiContact(
+                3013, EsiContact.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
             ),
-            EsiContactStub(1016, EsiContactStub.ContactType.CHARACTER, standing=10.0),
-            EsiContactStub(2013, EsiContactStub.ContactType.CORPORATION, standing=5.0),
-            EsiContactStub(2012, EsiContactStub.ContactType.CORPORATION, standing=-5.0),
-            EsiContactStub(1005, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
-            EsiContactStub(1013, EsiContactStub.ContactType.CHARACTER, standing=-5.0),
-            EsiContactStub(1002, EsiContactStub.ContactType.CHARACTER, standing=10.0),
-            EsiContactStub(3014, EsiContactStub.ContactType.ALLIANCE, standing=5.0),
-            EsiContactStub(2015, EsiContactStub.ContactType.CORPORATION, standing=10.0),
-            EsiContactStub(
-                2011, EsiContactStub.ContactType.CORPORATION, standing=-10.0
-            ),
-            EsiContactStub(2014, EsiContactStub.ContactType.CORPORATION, standing=0.0),
-            EsiContactStub(3015, EsiContactStub.ContactType.ALLIANCE, standing=10.0),
-            EsiContactStub(1012, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
-            EsiContactStub(1015, EsiContactStub.ContactType.CHARACTER, standing=5.0),
-            EsiContactStub(1004, EsiContactStub.ContactType.CHARACTER, standing=10.0),
-            EsiContactStub(3012, EsiContactStub.ContactType.ALLIANCE, standing=-5.0),
+            EsiContact(1016, EsiContact.ContactType.CHARACTER, standing=10.0),
+            EsiContact(2013, EsiContact.ContactType.CORPORATION, standing=5.0),
+            EsiContact(2012, EsiContact.ContactType.CORPORATION, standing=-5.0),
+            EsiContact(1005, EsiContact.ContactType.CHARACTER, standing=-10.0),
+            EsiContact(1013, EsiContact.ContactType.CHARACTER, standing=-5.0),
+            EsiContact(3014, EsiContact.ContactType.ALLIANCE, standing=5.0),
+            EsiContact(2015, EsiContact.ContactType.CORPORATION, standing=10.0),
+            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=-10.0),
+            EsiContact(2014, EsiContact.ContactType.CORPORATION, standing=0.0),
+            EsiContact(3015, EsiContact.ContactType.ALLIANCE, standing=10.0),
+            EsiContact(1012, EsiContact.ContactType.CHARACTER, standing=-10.0),
+            EsiContact(1015, EsiContact.ContactType.CHARACTER, standing=5.0),
+            EsiContact(1004, EsiContact.ContactType.CHARACTER, standing=10.0),
+            EsiContact(3012, EsiContact.ContactType.ALLIANCE, standing=-5.0),
         }
-        self.assertSetEqual(
-            set(esi_character_contacts.contacts(character_id)), expected
-        )
+        self.assertSetEqual(result, expected)
 
     @patch(MODELS_PATH + ".STANDINGSSYNC_ADD_WAR_TARGETS", True)
     @patch(MODELS_PATH + ".STANDINGSSYNC_REPLACE_CONTACTS", False)
@@ -693,10 +692,10 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContactStub(1014, EsiContactStub.ContactType.CHARACTER, standing=-10.0),
-            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
-            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
-            EsiContactStub(3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
+            EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=-10.0),
+            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
+            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+            EsiContact(3013, EsiContact.ContactType.ALLIANCE, standing=-10.0),
         }
         self.assertSetEqual(
             set(esi_character_contacts.contacts(character_id)),
@@ -714,8 +713,9 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
             self.synced_character_2.character_ownership.character.character_id
         )
         esi_character_contacts = EsiCharacterContactsStub()
+        war_target_label = EsiContactLabel(99, "war targets")
         esi_character_contacts.setup_labels(
-            character_id, {2: "other", 1: "war targets"}
+            character_id, [war_target_label, EsiContactLabel(1, "other")]
         )
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
@@ -726,16 +726,19 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContactStub(
+            EsiContact(
                 1014,
-                EsiContactStub.ContactType.CHARACTER,
+                EsiContact.ContactType.CHARACTER,
                 standing=-10.0,
-                label_ids=[1],
+                label_ids=[war_target_label.id],
             ),
-            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
-            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
-            EsiContactStub(
-                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
+            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+            EsiContact(
+                3013,
+                EsiContact.ContactType.ALLIANCE,
+                standing=-10.0,
+                label_ids=[war_target_label.id],
             ),
         }
         self.assertSetEqual(
@@ -752,25 +755,21 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         # given
         character_id = self.synced_character_2.character.character_id
         esi_character_contacts = EsiCharacterContactsStub()
-        esi_character_contacts.setup_labels(character_id, {1: "war targets"})
+        esi_character_contacts.setup_labels(
+            character_id, [EsiContactLabel(1, "war targets")]
+        )
         esi_character_contacts.setup_contacts(
             character_id,
             [
-                EsiContactStub(
+                EsiContact(
                     1011,
-                    EsiContactStub.ContactType.CHARACTER,
+                    EsiContact.ContactType.CHARACTER,
                     standing=-10.0,
                     label_ids=[1],
                 ),
-                EsiContactStub(
-                    1014, EsiContactStub.ContactType.CHARACTER, standing=10.0
-                ),
-                EsiContactStub(
-                    2011, EsiContactStub.ContactType.CORPORATION, standing=5.0
-                ),
-                EsiContactStub(
-                    3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0
-                ),
+                EsiContact(1014, EsiContact.ContactType.CHARACTER, standing=10.0),
+                EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
+                EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
             ],
         )
         # when
@@ -781,16 +780,16 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
         self.assertTrue(result)
         self.assertEqual(self.synced_character_2.last_error, SyncedCharacter.Error.NONE)
         expected = {
-            EsiContactStub(
+            EsiContact(
                 1014,
-                EsiContactStub.ContactType.CHARACTER,
+                EsiContact.ContactType.CHARACTER,
                 standing=-10.0,
                 label_ids=[1],
             ),
-            EsiContactStub(2011, EsiContactStub.ContactType.CORPORATION, standing=5.0),
-            EsiContactStub(3011, EsiContactStub.ContactType.ALLIANCE, standing=-10.0),
-            EsiContactStub(
-                3013, EsiContactStub.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
+            EsiContact(2011, EsiContact.ContactType.CORPORATION, standing=5.0),
+            EsiContact(3011, EsiContact.ContactType.ALLIANCE, standing=-10.0),
+            EsiContact(
+                3013, EsiContact.ContactType.ALLIANCE, standing=-10.0, label_ids=[1]
             ),
         }
         self.assertSetEqual(
@@ -809,7 +808,9 @@ class TestSyncCharacter(LoadTestDataMixin, TestCase):
             self.synced_character_2.character_ownership.character.character_id
         )
         esi_character_contacts = EsiCharacterContactsStub()
-        esi_character_contacts.setup_labels(character_id, {1: "war targets"})
+        esi_character_contacts.setup_labels(
+            character_id, [EsiContactLabel(1, "war targets")]
+        )
         esi_character_contacts.setup_contacts(character_id, self.CHARACTER_CONTACTS)
         # when
         result = self._run_sync(
