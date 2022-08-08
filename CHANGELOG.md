@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - yyyy-mm-dd
 
-## [1.5.0] - tbd
+## [1.5.0] - 2022-08-08
 
 ### Update notes
 
@@ -24,7 +24,8 @@ celery -A myauth call standingssync.tasks.run_regular_sync
 
 ### Fixed
 
-- Fix: Not all active wars are shown in the app
+- Fix: Not all active wars are shown in the app (#13)
+- No longer creates own character as contact when syncing
 
 ## [1.4.1] - 2022-07-29
 
